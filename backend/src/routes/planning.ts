@@ -8,47 +8,55 @@ import { runPlanning, scenarioToGraph, monteCarloDeadlineRisk, buildDecisionGrap
 import { recalculateVendorStatistics } from '../services/statistics';
 import { toNumber } from '../lib/utils';
 import { param } from '../lib/param';
+import { asyncHandler, ApiError, validateBody } from '../lib/http';
+import { actualsSchema, planningRunSchema, selectScenarioSchema } from '../lib/schemas';
 
 const router = Router();
 router.use(authMiddleware, requireView);
 
-router.post('/orders/:orderId/planning-runs', requirePlan, async (req: AuthRequest, res) => {
-  try {
-    const order = await prisma.order.findUnique({ where: { id: param(req.params.orderId) } });
-    if (!order) return res.status(404).json({ error: 'الطلب غير موجود' });
+router.post('/orders/:orderId/planning-runs', requirePlan, asyncHandler(async (req: AuthRequest, res) => {
+  const body = validateBody(planningRunSchema, req.body);
+  const orderId = param(req.params.orderId);
+  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  if (!order) throw new ApiError(404, 'الطلب غير موجود');
 
-    const deadline = new Date(req.body.deadline || order.deadline || Date.now());
-    const quantity = Number(req.body.quantity) || order.totalQty || 1;
+  const deadline = body.deadline || order.deadline || new Date();
+  const quantity = body.quantity || order.totalQty || 1;
 
-    const result = await runPlanning({
-      orderId: param(req.params.orderId),
-      runById: req.user!.userId,
-      deadline,
-      quantity,
-      fabricIds: req.body.fabricIds,
-      printIds: req.body.printIds,
-      factoryIds: req.body.factoryIds,
-      enableSplits: Boolean(req.body.enableSplits),
-      customWeights: req.body.customWeights,
-    });
+  const result = await runPlanning({
+    orderId,
+    runById: req.user!.userId,
+    deadline,
+    quantity,
+    fabricIds: body.fabricIds,
+    printIds: body.printIds,
+    factoryIds: body.factoryIds,
+    enableSplits: Boolean(body.enableSplits),
+    customWeights: body.customWeights,
+    orderCategory: body.orderCategory || order.category || undefined,
+    requiredPrintType: body.requiredPrintType || order.requiredPrintType || undefined,
+    workflowId: body.workflowId,
+    enabledStageIds: body.enabledStageIds,
+    candidateProcessIdsByStage: body.candidateProcessIdsByStage,
+    splitSharesByStage: body.splitSharesByStage,
+    monteCarloTrials: body.monteCarloTrials,
+    maxScenarios: body.maxScenarios,
+  });
 
-    await logAudit(req.user!.userId, 'PLAN', 'Order', param(req.params.orderId));
+  await logAudit(req.user!.userId, 'PLAN', 'Order', orderId);
 
-    res.status(201).json({
-      run: result.run,
-      scenarios: result.scenarios.map((s) => ({
-        ...s,
-        label: SCENARIO_LABELS[s.type],
-        totalCost: toNumber(s.totalCost),
-        certaintyPct: toNumber(s.certaintyPct),
-      })),
-    });
-  } catch (e) {
-    res.status(400).json({ error: e instanceof Error ? e.message : 'خطأ في التخطيط' });
-  }
-});
+  res.status(201).json({
+    run: result.run,
+    scenarios: result.scenarios.map((s) => ({
+      ...s,
+      label: SCENARIO_LABELS[s.type],
+      totalCost: toNumber(s.totalCost),
+      certaintyPct: toNumber(s.certaintyPct),
+    })),
+  });
+}));
 
-router.get('/orders/:orderId/planning-runs', async (req, res) => {
+router.get('/orders/:orderId/planning-runs', asyncHandler(async (req, res) => {
   const runs = await prisma.planningRun.findMany({
     where: { orderId: param(req.params.orderId) },
     orderBy: { createdAt: 'desc' },
@@ -59,22 +67,22 @@ router.get('/orders/:orderId/planning-runs', async (req, res) => {
     },
   });
   res.json(runs);
-});
+}));
 
-router.get('/planning-runs/:runId/scenarios', async (req, res) => {
+router.get('/planning-runs/:runId/scenarios', asyncHandler(async (req, res) => {
   const scenarios = await prisma.scenario.findMany({
     where: { planningRunId: param(req.params.runId) },
     include: { steps: { include: { splits: true }, orderBy: { stepOrder: 'asc' } } },
   });
   res.json(scenarios.map((s) => ({ ...s, label: SCENARIO_LABELS[s.type] })));
-});
+}));
 
-router.get('/planning-runs/:runId/pareto', async (req, res) => {
+router.get('/planning-runs/:runId/pareto', asyncHandler(async (req, res) => {
   const run = await prisma.planningRun.findUnique({
     where: { id: param(req.params.runId) },
     include: { scenarios: true },
   });
-  if (!run) return res.status(404).json({ error: 'تشغيل التخطيط غير موجود' });
+  if (!run) throw new ApiError(404, 'تشغيل التخطيط غير موجود');
 
   const frontier = computeParetoFrontier(
     run.scenarios.map((s) => ({
@@ -93,9 +101,9 @@ router.get('/planning-runs/:runId/pareto', async (req, res) => {
     frontier,
     onFrontier: frontier.filter((p) => p.isOnFrontier),
   });
-});
+}));
 
-router.get('/scenarios/:id/graph', async (req, res) => {
+router.get('/scenarios/:id/graph', asyncHandler(async (req, res) => {
   const scenario = await prisma.scenario.findUnique({
     where: { id: param(req.params.id) },
     include: {
@@ -103,7 +111,7 @@ router.get('/scenarios/:id/graph', async (req, res) => {
       planningRun: true,
     },
   });
-  if (!scenario) return res.status(404).json({ error: 'السيناريو غير موجود' });
+  if (!scenario) throw new ApiError(404, 'السيناريو غير موجود');
 
   let alternativesByStep: Record<number, Array<{ vendorId: string; vendorName: string; days: number; cost: number }>> = {};
   if (scenario.planningRun.constraintsJson) {
@@ -129,36 +137,27 @@ router.get('/scenarios/:id/graph', async (req, res) => {
     ...linearGraph,
     decisionGraph,
   });
-});
+}));
 
-router.post('/orders/:orderId/select-scenario', requireWrite, async (req: AuthRequest, res) => {
+router.post('/orders/:orderId/select-scenario', requireWrite, asyncHandler(async (req: AuthRequest, res) => {
+  const { scenarioId } = validateBody(selectScenarioSchema, req.body);
   const scenario = await prisma.scenario.findUnique({
-    where: { id: req.body.scenarioId },
+    where: { id: scenarioId },
     include: {
       steps: { orderBy: { stepOrder: 'asc' } },
       planningRun: true,
     },
   });
-  if (!scenario) return res.status(404).json({ error: 'السيناريو غير موجود' });
+  if (!scenario) throw new ApiError(404, 'السيناريو غير موجود');
 
   if (scenario.planningRun.orderId !== param(req.params.orderId)) {
-    return res.status(400).json({ error: 'السيناريو لا ينتمي لهذا الطلب' });
+    throw new ApiError(400, 'السيناريو لا ينتمي لهذا الطلب');
   }
 
   const factoryStep = scenario.steps.find((s) => s.stepType === StepType.FACTORY);
   const summary = scenario.steps
     .map((s) => `${s.stepType}: ${s.vendorName} (${s.startDate.toISOString().split('T')[0]} → ${s.endDate.toISOString().split('T')[0]})`)
     .join('\n');
-
-  await prisma.order.update({
-    where: { id: param(req.params.orderId) },
-    data: { selectedScenarioId: scenario.id, status: 'PLANNED' },
-  });
-
-  const order = await prisma.order.findUnique({
-    where: { id: param(req.params.orderId) },
-    include: { fields: true },
-  });
 
   const updates: Array<{ label: string; value: string }> = [];
   if (factoryStep) updates.push({ label: 'اسم المصنع', value: factoryStep.vendorName });
@@ -167,12 +166,22 @@ router.post('/orders/:orderId/select-scenario', requireWrite, async (req: AuthRe
     value: `مسار مختار: ${SCENARIO_LABELS[scenario.type]}\n${summary}\nإجمالي: ${scenario.totalDays} يوم | ${toNumber(scenario.totalCost)}`,
   });
 
-  for (const u of updates) {
-    const field = order?.fields.find((f) => f.label === u.label);
-    if (field) {
-      await prisma.orderField.update({ where: { id: field.id }, data: { value: u.value } });
+  await prisma.$transaction(async (tx) => {
+    await tx.order.update({
+      where: { id: param(req.params.orderId) },
+      data: { selectedScenarioId: scenario.id, status: 'PLANNED' },
+    });
+    const order = await tx.order.findUnique({
+      where: { id: param(req.params.orderId) },
+      include: { fields: true },
+    });
+    for (const u of updates) {
+      const field = order?.fields.find((f) => f.label === u.label);
+      if (field) {
+        await tx.orderField.update({ where: { id: field.id }, data: { value: u.value } });
+      }
     }
-  }
+  });
 
   await logAudit(req.user!.userId, 'SELECT_SCENARIO', 'Order', param(req.params.orderId), scenario.id);
 
@@ -185,49 +194,61 @@ router.post('/orders/:orderId/select-scenario', requireWrite, async (req: AuthRe
     order: refreshed,
     prefill: { factoryName: factoryStep?.vendorName, instructions: updates.find((u) => u.label === 'تعليمات')?.value },
   });
-});
+}));
 
-router.post('/orders/:orderId/actuals', requireWrite, async (req: AuthRequest, res) => {
-  const items = Array.isArray(req.body.items) ? req.body.items : [req.body];
-  const created = [];
+router.post('/orders/:orderId/actuals', requireWrite, asyncHandler(async (req: AuthRequest, res) => {
+  const parsed = validateBody(actualsSchema, req.body);
+  const items = 'items' in parsed ? parsed.items : [parsed];
+  const orderId = param(req.params.orderId);
+  const saved = await prisma.$transaction(async (tx) => {
+    const records = [];
+    for (const item of items) {
+      if (item.routeStepId) {
+        const step = await tx.routeStep.findFirst({
+          where: { id: item.routeStepId, scenario: { planningRun: { orderId } } },
+          select: { id: true },
+        });
+        if (!step) throw new ApiError(400, 'خطوة التخطيط لا تنتمي لهذا الطلب');
+        records.push(
+          await tx.actualPerformance.upsert({
+            where: { orderId_routeStepId: { orderId, routeStepId: item.routeStepId } },
+            create: { orderId, ...item, routeStepId: item.routeStepId, notes: item.notes || null },
+            update: { ...item, routeStepId: item.routeStepId, notes: item.notes || null },
+          })
+        );
+      } else {
+        records.push(
+          await tx.actualPerformance.create({
+            data: { orderId, ...item, routeStepId: null, notes: item.notes || null },
+          })
+        );
+      }
+    }
+    await tx.order.update({ where: { id: orderId }, data: { status: 'COMPLETED' } });
+    return records;
+  });
 
   for (const item of items) {
-    const record = await prisma.actualPerformance.create({
-      data: {
-        orderId: param(req.params.orderId),
-        routeStepId: item.routeStepId || null,
-        stepType: item.stepType,
-        vendorType: item.vendorType as VendorType,
-        vendorId: item.vendorId,
-        vendorName: item.vendorName,
-        plannedDays: Number(item.plannedDays),
-        actualDays: Number(item.actualDays),
-        plannedCost: Number(item.plannedCost),
-        actualCost: Number(item.actualCost),
-      },
-    });
-    await recalculateVendorStatistics(item.vendorType, item.vendorId);
-    created.push(record);
+    await recalculateVendorStatistics(item.vendorType as VendorType, item.vendorId);
   }
 
-  await prisma.order.update({ where: { id: param(req.params.orderId) }, data: { status: 'COMPLETED' } });
-  await logAudit(req.user!.userId, 'ACTUALS', 'Order', param(req.params.orderId));
-  res.status(201).json(created);
-});
+  await logAudit(req.user!.userId, 'ACTUALS', 'Order', orderId);
+  res.status(201).json(saved);
+}));
 
-router.get('/orders/:orderId/actuals', async (req, res) => {
+router.get('/orders/:orderId/actuals', asyncHandler(async (req, res) => {
   const actuals = await prisma.actualPerformance.findMany({
     where: { orderId: param(req.params.orderId) },
     orderBy: { recordedAt: 'desc' },
   });
   res.json(actuals);
-});
+}));
 
-router.get('/orders/:orderId/deadline-risk', async (req, res) => {
+router.get('/orders/:orderId/deadline-risk', asyncHandler(async (req, res) => {
   const order = await prisma.order.findUnique({ where: { id: param(req.params.orderId) } });
   if (!order?.deadline) return res.json({ riskPct: 0 });
   const riskPct = await monteCarloDeadlineRisk(param(req.params.orderId), order.deadline);
   res.json({ riskPct });
-});
+}));
 
 export default router;

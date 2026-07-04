@@ -29,10 +29,12 @@ export default function ReportsPage() {
     const rows = [['vendor', 'dayDelta', 'costDelta'], ...accuracy.map((a) => [a.vendorName, a.dayDelta, a.costDelta])];
     const csv = rows.map((r) => r.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
+    a.href = url;
     a.download = 'estimate-accuracy.csv';
     a.click();
+    URL.revokeObjectURL(url);
   }
 
   if (loading) return <p className="text-sm text-zinc-500">جاري التحميل...</p>;

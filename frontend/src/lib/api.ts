@@ -16,13 +16,16 @@ export function clearAuth() {
 
 export function getUser() {
   const raw = localStorage.getItem('user');
-  return raw ? JSON.parse(raw) : null;
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    clearAuth();
+    return null;
+  }
 }
 
-export async function api<T>(
-  path: string,
-  options: RequestInit = {}
-): Promise<T> {
+function authHeaders(options: RequestInit = {}) {
   const headers: Record<string, string> = {
     ...(options.headers as Record<string, string>),
   };
@@ -31,8 +34,11 @@ export async function api<T>(
   }
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
 
-  const res = await fetch(`${API}${path}`, { ...options, headers });
+async function request(path: string, options: RequestInit = {}) {
+  const res = await fetch(`${API}${path}`, { ...options, headers: authHeaders(options) });
   if (res.status === 401) {
     clearAuth();
     window.location.href = '/login';
@@ -46,10 +52,36 @@ export async function api<T>(
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || 'Request failed');
   }
+  return res;
+}
+
+export async function api<T>(
+  path: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const res = await request(path, options);
   if (res.status === 204) return undefined as T;
   return res.json();
 }
 
+export async function apiBlob(path: string, options: RequestInit = {}): Promise<Blob> {
+  const res = await request(path, options);
+  return res.blob();
+}
+
+export async function downloadBlob(path: string, filename: string) {
+  const blob = await apiBlob(path);
+  const url = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 export function photoUrl(orderId: string, photoId: string) {
-  return `${API}/orders/${orderId}/photos/${photoId}/file?token=${getToken()}`;
+  return `${API}/orders/${orderId}/photos/${photoId}/file`;
 }

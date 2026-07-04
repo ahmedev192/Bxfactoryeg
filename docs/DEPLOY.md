@@ -59,6 +59,9 @@ JWT_SECRET="<long-random-secret-min-32-chars>"
 PORT=4000
 UPLOAD_DIR="/var/www/production-ops/backend/uploads"
 FRONTEND_URL="https://ops.example.com"
+TRUST_PROXY=true
+SEED_ADMIN_EMAIL="admin@example.com"
+SEED_ADMIN_PASSWORD="<strong-initial-password-min-12-chars>"
 ```
 
 Build and migrate:
@@ -66,7 +69,7 @@ Build and migrate:
 ```bash
 npm run build -w shared
 npm run db:generate -w backend
-npm run db:migrate -w backend
+npm run db:migrate:deploy -w backend
 npm run db:seed -w backend    # optional: seed admin user
 npm run build
 ```
@@ -139,15 +142,13 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    location /uploads/ {
-        proxy_pass http://127.0.0.1:4000;
-    }
-
     location / {
         try_files $uri $uri/ /index.html;
     }
 }
 ```
+
+Uploads are private. Do not expose `/uploads` directly from nginx; photos and PDFs are served through authenticated API routes.
 
 Enable and reload:
 
@@ -171,9 +172,11 @@ cd /var/www/production-ops
 git pull
 npm install
 npm run build
-npm run db:migrate -w backend
+npm run db:migrate:deploy -w backend
 pm2 restart production-ops-api
 ```
+
+Arabic PDF generation expects the Amiri regular TTF at `frontend/public/fonts/Amiri-Regular.ttf` before building. If it is missing, the PDF generator falls back to shaped text without embedding the font.
 
 ## Troubleshooting
 

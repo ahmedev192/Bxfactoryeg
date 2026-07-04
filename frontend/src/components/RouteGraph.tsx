@@ -12,6 +12,7 @@ import {
 } from '@xyflow/react';
 import dagre from '@dagrejs/dagre';
 import '@xyflow/react/dist/style.css';
+import { api } from '../lib/api';
 
 interface GraphNode {
   id: string;
@@ -31,6 +32,7 @@ const TYPE_COLORS: Record<string, string> = {
   fabric: '#854d0e',
   print: '#7c2d12',
   factory: '#312e81',
+  process: '#155e75',
   alternative: '#3f3f46',
 };
 
@@ -68,13 +70,7 @@ export default function RouteGraph({ scenarioId }: { scenarioId: string }) {
 
   useEffect(() => {
     setError('');
-    fetch(`/api/v1/scenarios/${scenarioId}/graph`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-    })
-      .then((r) => {
-        if (!r.ok) throw new Error('فشل تحميل المخطط');
-        return r.json();
-      })
+    api<GraphPayload>(`/scenarios/${scenarioId}/graph`)
       .then((g: GraphPayload) => {
         const src = g.decisionGraph?.nodes?.length ? g.decisionGraph : { nodes: g.nodes, edges: g.edges };
         setNodes(layoutGraph(src.nodes, src.edges));

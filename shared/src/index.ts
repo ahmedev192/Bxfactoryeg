@@ -26,6 +26,7 @@ export enum StepType {
   FABRIC = 'FABRIC',
   PRINT = 'PRINT',
   FACTORY = 'FACTORY',
+  GENERIC = 'GENERIC',
 }
 
 export enum FieldType {
@@ -40,6 +41,7 @@ export enum VendorType {
   FACTORY = 'FACTORY',
   PRINTING_PLACE = 'PRINTING_PLACE',
   FABRIC_SUPPLIER = 'FABRIC_SUPPLIER',
+  PROCESS_RESOURCE = 'PROCESS_RESOURCE',
 }
 
 export interface VendorBase {
@@ -86,6 +88,63 @@ export interface ScenarioComparisonRow {
   splitCount: number;
   vendorSummary: string;
   deadlineRiskPct?: number;
+}
+
+export interface StageDto {
+  id: string;
+  name: string;
+  description?: string | null;
+  isActive: boolean;
+}
+
+export interface WorkflowStepDto {
+  id?: string;
+  sortOrder: number;
+  stages: StageDto[];
+}
+
+export interface WorkflowTemplateDto {
+  id: string;
+  name: string;
+  description?: string | null;
+  isActive: boolean;
+  steps: WorkflowStepDto[];
+}
+
+export type ProcessCostType = 'PER_UNIT' | 'FIXED';
+
+export interface QuantityThresholdDto {
+  id?: string;
+  minQty: number;
+  addDays: number;
+}
+
+export interface ProcessResourceDto {
+  id: string;
+  name: string;
+  stageId: string;
+  stage?: StageDto;
+  timeOptimistic: number;
+  timeMostLikely: number;
+  timePessimistic: number;
+  cost: number;
+  costType: ProcessCostType;
+  confidencePct: number;
+  isActive: boolean;
+  isSplittable: boolean;
+  minSplitPct: number;
+  maxSplits: number;
+  notes?: string | null;
+  thresholds: QuantityThresholdDto[];
+}
+
+export interface GenericPlanningRequest {
+  workflowId: string;
+  enabledStageIds?: string[];
+  candidateProcessIdsByStage?: Record<string, string[]>;
+  splitSharesByStage?: Record<string, Record<string, number>>;
+  monteCarloTrials?: number;
+  maxScenarios?: number;
 }
 
 export const SCENARIO_LABELS: Record<ScenarioType, string> = {

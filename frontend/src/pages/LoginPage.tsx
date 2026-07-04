@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { api, setAuth } from '../lib/api';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('admin@company.com');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -35,6 +35,8 @@ export default function LoginPage() {
         <label className="block text-xs text-zinc-400">
           البريد
           <input
+            type="email"
+            autoComplete="username"
             className="mt-1 w-full rounded-lg bg-zinc-950 border border-zinc-700 px-3 py-2 text-sm"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -44,6 +46,7 @@ export default function LoginPage() {
           كلمة المرور
           <input
             type="password"
+            autoComplete="current-password"
             className="mt-1 w-full rounded-lg bg-zinc-950 border border-zinc-700 px-3 py-2 text-sm"
             value={password}
             onChange={(e) => setPassword(e.target.value)}

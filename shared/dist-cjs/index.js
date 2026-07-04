@@ -30,6 +30,7 @@ var StepType;
     StepType["FABRIC"] = "FABRIC";
     StepType["PRINT"] = "PRINT";
     StepType["FACTORY"] = "FACTORY";
+    StepType["GENERIC"] = "GENERIC";
 })(StepType || (exports.StepType = StepType = {}));
 var FieldType;
 (function (FieldType) {
@@ -44,6 +45,7 @@ var VendorType;
     VendorType["FACTORY"] = "FACTORY";
     VendorType["PRINTING_PLACE"] = "PRINTING_PLACE";
     VendorType["FABRIC_SUPPLIER"] = "FABRIC_SUPPLIER";
+    VendorType["PROCESS_RESOURCE"] = "PROCESS_RESOURCE";
 })(VendorType || (exports.VendorType = VendorType = {}));
 exports.SCENARIO_LABELS = {
     [ScenarioType.FASTEST_TIME]: 'أسرع وقت',

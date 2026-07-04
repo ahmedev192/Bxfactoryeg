@@ -10,6 +10,7 @@ const allLinks = [
   { to: '/master/factories', label: 'المصانع', roles: null },
   { to: '/master/printing', label: 'المطابع', roles: null },
   { to: '/master/fabric', label: 'موردو القماش', roles: null },
+  { to: '/workflows', label: 'سير العمل', roles: null },
   { to: '/templates', label: 'قوالب الحقول', roles: [UserRole.ADMIN] },
   { to: '/reports', label: 'التقارير', roles: null },
   { to: '/settings', label: 'الإعدادات', roles: [UserRole.ADMIN] },

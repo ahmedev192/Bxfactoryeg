@@ -1,5 +1,4 @@
 import { Navigate, Route, Routes, useParams } from 'react-router-dom';
-import { getToken } from './lib/api';
 import { AuthProvider, RequireRole } from './hooks/useAuth';
 import { UserRole } from '@production-ops/shared';
 import Layout from './components/Layout';
@@ -11,6 +10,7 @@ import VendorPage from './pages/VendorPage';
 import SettingsPage from './pages/SettingsPage';
 import ReportsPage from './pages/ReportsPage';
 import TemplatesPage from './pages/TemplatesPage';
+import WorkflowsPage from './pages/WorkflowsPage';
 
 function OrderDetailWrapper() {
   const { id } = useParams();
@@ -19,12 +19,10 @@ function OrderDetailWrapper() {
 }
 
 export default function App() {
-  const authed = Boolean(getToken());
-
   return (
     <AuthProvider>
       <Routes>
-        <Route path="/login" element={authed ? <Navigate to="/" replace /> : <LoginPage />} />
+        <Route path="/login" element={<LoginPage />} />
         <Route element={<Layout />}>
           <Route index element={<DashboardPage />} />
           <Route path="orders" element={<OrdersPage />} />
@@ -32,6 +30,7 @@ export default function App() {
           <Route path="master/factories" element={<VendorPage endpoint="factories" />} />
           <Route path="master/printing" element={<VendorPage endpoint="printing-places" />} />
           <Route path="master/fabric" element={<VendorPage endpoint="fabric-suppliers" />} />
+          <Route path="workflows" element={<WorkflowsPage />} />
           <Route
             path="settings"
             element={
@@ -50,7 +49,7 @@ export default function App() {
             }
           />
         </Route>
-        <Route path="*" element={<Navigate to={authed ? '/' : '/login'} replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthProvider>
   );

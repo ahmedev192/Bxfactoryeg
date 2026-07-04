@@ -8,7 +8,7 @@ import {
   ScenarioType,
   UserRole,
 } from '@production-ops/shared';
-import { api, getToken } from '../lib/api';
+import { api, apiBlob, downloadBlob } from '../lib/api';
 import { downloadProductionPdf, pdfToBlob } from '../lib/pdf/generator';
 import { canWrite, canPlan, canExportPdf } from '../lib/rbac';
 import { useAuth } from '../hooks/useAuth';
@@ -81,6 +81,8 @@ interface OrderDetail {
     actualDays: number;
     plannedCost: number;
     actualCost: number;
+    actualCompletionDate?: string | null;
+    notes?: string | null;
   }>;
 }
 
@@ -90,9 +92,32 @@ interface VendorOption {
   isActive: boolean;
 }
 
+interface StageOption {
+  id: string;
+  name: string;
+}
+
+interface WorkflowOption {
+  id: string;
+  name: string;
+  isActive: boolean;
+  steps: Array<{ sortOrder: number; stages: Array<{ stage: StageOption }> }>;
+}
+
+interface ProcessOption {
+  id: string;
+  name: string;
+  stageId: string;
+  isActive: boolean;
+}
+
 interface FieldTemplate {
   id: string;
   name: string;
+}
+
+interface GlobalSettings {
+  companyName: string;
 }
 
 type Tab = 'overview' | 'planning' | 'pdf' | 'execution' | 'history';
@@ -149,6 +174,9 @@ export default function OrderDetailPage({ orderId }: { orderId: string }) {
   const [customWeights, setCustomWeights] = useState({ time: 33, cost: 33, certainty: 34 });
   const [templates, setTemplates] = useState<FieldTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [settings, setSettings] = useState<GlobalSettings | null>(null);
+  const [newColor, setNewColor] = useState('');
+  const [newSize, setNewSize] = useState('');
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -159,8 +187,12 @@ export default function OrderDetailPage({ orderId }: { orderId: string }) {
   const [selectedFabricIds, setSelectedFabricIds] = useState<string[]>([]);
   const [selectedPrintIds, setSelectedPrintIds] = useState<string[]>([]);
   const [selectedFactoryIds, setSelectedFactoryIds] = useState<string[]>([]);
+  const [workflows, setWorkflows] = useState<WorkflowOption[]>([]);
+  const [processResources, setProcessResources] = useState<ProcessOption[]>([]);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState('');
+  const [selectedProcessIdsByStage, setSelectedProcessIdsByStage] = useState<Record<string, string[]>>({});
 
-  const [actualsForm, setActualsForm] = useState<Record<string, { actualDays: string; actualCost: string }>>({});
+  const [actualsForm, setActualsForm] = useState<Record<string, { actualDays: string; actualCost: string; actualCompletionDate?: string; notes?: string }>>({});
   const [paretoFrontier, setParetoFrontier] = useState<Array<{ scenarioId?: string; label?: string; totalDays: number; totalCost: number; certaintyPct: number; isOnFrontier: boolean }>>([]);
 
   const load = useCallback(async () => {
@@ -184,6 +216,7 @@ export default function OrderDetailPage({ orderId }: { orderId: string }) {
   }, [load]);
 
   useEffect(() => {
+    let urls: string[] = [];
     if (!order?.photos.length) {
       setPhotoBlobs([]);
       return;
@@ -191,17 +224,23 @@ export default function OrderDetailPage({ orderId }: { orderId: string }) {
     let cancelled = false;
     Promise.all(
       order.photos.map(async (p) => {
-        const res = await fetch(`/api/v1/orders/${orderId}/photos/${p.id}/file`, {
-          headers: { Authorization: `Bearer ${getToken()}` },
-        });
-        const blob = await res.blob();
+        const blob = await apiBlob(`/orders/${orderId}/photos/${p.id}/file`);
         return URL.createObjectURL(blob);
       })
-    ).then((urls) => {
-      if (!cancelled) setPhotoBlobs(urls);
+    ).then((createdUrls) => {
+      urls = createdUrls;
+      if (!cancelled) {
+        setPhotoBlobs((prev) => {
+          prev.forEach((url) => URL.revokeObjectURL(url));
+          return createdUrls;
+        });
+      } else {
+        createdUrls.forEach((url) => URL.revokeObjectURL(url));
+      }
     });
     return () => {
       cancelled = true;
+      urls.forEach((url) => URL.revokeObjectURL(url));
     };
   }, [order?.photos, orderId]);
 
@@ -218,19 +257,26 @@ export default function OrderDetailPage({ orderId }: { orderId: string }) {
       api<VendorOption[]>('/fabric-suppliers'),
       api<VendorOption[]>('/printing-places'),
       api<VendorOption[]>('/factories'),
+      api<WorkflowOption[]>('/workflows'),
+      api<ProcessOption[]>('/process-resources'),
     ])
-      .then(([fab, pr, fac]) => {
+      .then(([fab, pr, fac, workflowRows, processRows]) => {
         setFabricSuppliers(fab.filter((v) => v.isActive));
         setPrintingPlaces(pr.filter((v) => v.isActive));
         setFactories(fac.filter((v) => v.isActive));
+        setWorkflows(workflowRows.filter((v) => v.isActive));
+        setProcessResources(processRows.filter((v) => v.isActive));
       })
       .catch(console.error);
   }, [tab, plannable]);
 
   useEffect(() => {
     if (tab !== 'pdf') return;
-    api<FieldTemplate[]>('/field-templates')
-      .then(setTemplates)
+    Promise.all([api<FieldTemplate[]>('/field-templates'), api<GlobalSettings>('/settings')])
+      .then(([fieldTemplates, globalSettings]) => {
+        setTemplates(fieldTemplates);
+        setSettings(globalSettings);
+      })
       .catch(console.error);
   }, [tab]);
 
@@ -268,6 +314,14 @@ export default function OrderDetailPage({ orderId }: { orderId: string }) {
 
   const compareScenarioA = scenarios.find((s) => s.id === compareA);
   const compareScenarioB = scenarios.find((s) => s.id === compareB);
+  const selectedWorkflow = workflows.find((workflow) => workflow.id === selectedWorkflowId);
+  const selectedWorkflowStages = useMemo(() => {
+    const seen = new Map<string, StageOption>();
+    selectedWorkflow?.steps.forEach((step) => {
+      step.stages.forEach((membership) => seen.set(membership.stage.id, membership.stage));
+    });
+    return [...seen.values()];
+  }, [selectedWorkflow]);
 
   async function saveOrder(partial: Record<string, unknown>) {
     if (!writable) return;
@@ -344,10 +398,14 @@ export default function OrderDetailPage({ orderId }: { orderId: string }) {
   }
 
   function addColor() {
-    const v = prompt('اسم اللون');
-    if (!v?.trim() || !order || !writable) return;
-    if (order.colors.includes(v.trim())) return;
-    setOrder({ ...order, colors: [...order.colors, v.trim()] });
+    const v = newColor.trim();
+    if (!v || !order || !writable) return;
+    if (order.colors.includes(v)) {
+      setStatusMsg('هذا اللون موجود بالفعل');
+      return;
+    }
+    setOrder({ ...order, colors: [...order.colors, v] });
+    setNewColor('');
   }
 
   function removeColor(color: string) {
@@ -359,10 +417,14 @@ export default function OrderDetailPage({ orderId }: { orderId: string }) {
   }
 
   function addSize() {
-    const v = prompt('المقاس');
-    if (!v?.trim() || !order || !writable) return;
-    if (order.sizes.includes(v.trim())) return;
-    setOrder({ ...order, sizes: [...order.sizes, v.trim()] });
+    const v = newSize.trim();
+    if (!v || !order || !writable) return;
+    if (order.sizes.includes(v)) {
+      setStatusMsg('هذا المقاس موجود بالفعل');
+      return;
+    }
+    setOrder({ ...order, sizes: [...order.sizes, v] });
+    setNewSize('');
   }
 
   function removeSize(size: string) {
@@ -385,13 +447,19 @@ export default function OrderDetailPage({ orderId }: { orderId: string }) {
     return list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
   }
 
+  function toggleProcessForStage(stageId: string, processId: string) {
+    setSelectedProcessIdsByStage((prev) => ({
+      ...prev,
+      [stageId]: toggleVendorId(prev[stageId] || [], processId),
+    }));
+  }
+
   async function uploadPhotos(files: FileList | null) {
     if (!files?.length || !writable) return;
     const fd = new FormData();
     Array.from(files).forEach((f) => fd.append('photos', f));
-    await fetch(`/api/v1/orders/${orderId}/photos`, {
+    await api(`/orders/${orderId}/photos`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${getToken()}` },
       body: fd,
     });
     load();
@@ -445,6 +513,18 @@ export default function OrderDetailPage({ orderId }: { orderId: string }) {
         fabricIds: selectedFabricIds.length ? selectedFabricIds : undefined,
         printIds: selectedPrintIds.length ? selectedPrintIds : undefined,
         factoryIds: selectedFactoryIds.length ? selectedFactoryIds : undefined,
+        workflowId: selectedWorkflowId || undefined,
+        enabledStageIds: selectedWorkflowId ? selectedWorkflowStages.map((stage) => stage.id) : undefined,
+        candidateProcessIdsByStage: selectedWorkflowId
+          ? Object.fromEntries(
+              selectedWorkflowStages.map((stage) => [
+                stage.id,
+                selectedProcessIdsByStage[stage.id]?.length
+                  ? selectedProcessIdsByStage[stage.id]
+                  : processResources.filter((process) => process.stageId === stage.id).map((process) => process.id),
+              ])
+            )
+          : undefined,
         customWeights: {
           time: customWeights.time / 100,
           cost: customWeights.cost / 100,
@@ -496,6 +576,7 @@ export default function OrderDetailPage({ orderId }: { orderId: string }) {
       inclPhotos,
       orderNo: order.orderNo,
       orderId: order.id,
+      companyName: settings?.companyName,
     };
   }
 
@@ -550,12 +631,10 @@ export default function OrderDetailPage({ orderId }: { orderId: string }) {
       fd.append('filename', `${pdfName}.pdf`);
       fd.append('orient', orient);
       fd.append('inclPhotos', String(inclPhotos));
-      const uploadRes = await fetch(`/api/v1/orders/${orderId}/pdf-exports/upload`, {
+      await api(`/orders/${orderId}/pdf-exports/upload`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${getToken()}` },
         body: fd,
       });
-      if (!uploadRes.ok) throw new Error('فشل رفع PDF');
 
       closePdfPreview();
       setStatusMsg('✓ تم التصدير بنجاح');
@@ -581,9 +660,11 @@ export default function OrderDetailPage({ orderId }: { orderId: string }) {
         vendorId: step.vendorId,
         vendorName: step.vendorName,
         plannedDays: step.days,
-        actualDays: Number(form.actualDays) || step.days,
+        actualDays: Number.isFinite(Number(form.actualDays)) ? Number(form.actualDays) : step.days,
         plannedCost: step.cost,
-        actualCost: Number(form.actualCost) || step.cost,
+        actualCost: Number.isFinite(Number(form.actualCost)) ? Number(form.actualCost) : step.cost,
+        actualCompletionDate: form.actualCompletionDate || undefined,
+        notes: form.notes || undefined,
       };
     });
     setSaving(true);
@@ -746,14 +827,66 @@ export default function OrderDetailPage({ orderId }: { orderId: string }) {
 
           {plannable && (
             <div className="rounded-xl border border-zinc-800 p-4 bg-zinc-900 space-y-3">
-              {renderVendorMultiSelect('موردو القماش', fabricSuppliers, selectedFabricIds, (id) =>
-                setSelectedFabricIds((prev) => toggleVendorId(prev, id))
+              {workflows.length > 0 && (
+                <div className="rounded-lg border border-zinc-800 p-3 bg-zinc-950 space-y-3">
+                  <label className="block text-xs text-zinc-400">
+                    قالب سير العمل
+                    <select
+                      className="mt-1 w-full rounded bg-zinc-950 border border-zinc-800 px-2 py-1.5 text-sm"
+                      value={selectedWorkflowId}
+                      onChange={(e) => {
+                        setSelectedWorkflowId(e.target.value);
+                        setSelectedProcessIdsByStage({});
+                      }}
+                    >
+                      <option value="">استخدم التخطيط القديم (قماش → طباعة → مصنع)</option>
+                      {workflows.map((workflow) => (
+                        <option key={workflow.id} value={workflow.id}>{workflow.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  {selectedWorkflow && (
+                    <div className="space-y-2">
+                      {selectedWorkflowStages.map((stage) => {
+                        const candidates = processResources.filter((process) => process.stageId === stage.id);
+                        return (
+                          <div key={stage.id} className="border-t border-zinc-800 pt-2">
+                            <p className="text-xs text-zinc-300 mb-1">{stage.name}</p>
+                            <div className="flex flex-wrap gap-2">
+                              {candidates.length ? candidates.map((process) => (
+                                <button
+                                  key={process.id}
+                                  type="button"
+                                  onClick={() => toggleProcessForStage(stage.id, process.id)}
+                                  className={`text-[11px] px-2 py-1 rounded border ${
+                                    (selectedProcessIdsByStage[stage.id] || []).includes(process.id)
+                                      ? 'border-emerald-500 text-emerald-300'
+                                      : 'border-zinc-700 text-zinc-400'
+                                  }`}
+                                >
+                                  {process.name}
+                                </button>
+                              )) : <span className="text-[11px] text-red-400">لا توجد موارد لهذه المرحلة</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               )}
-              {renderVendorMultiSelect('المطابع', printingPlaces, selectedPrintIds, (id) =>
-                setSelectedPrintIds((prev) => toggleVendorId(prev, id))
-              )}
-              {renderVendorMultiSelect('المصانع', factories, selectedFactoryIds, (id) =>
-                setSelectedFactoryIds((prev) => toggleVendorId(prev, id))
+              {!selectedWorkflowId && (
+                <>
+                  {renderVendorMultiSelect('موردو القماش', fabricSuppliers, selectedFabricIds, (id) =>
+                    setSelectedFabricIds((prev) => toggleVendorId(prev, id))
+                  )}
+                  {renderVendorMultiSelect('المطابع', printingPlaces, selectedPrintIds, (id) =>
+                    setSelectedPrintIds((prev) => toggleVendorId(prev, id))
+                  )}
+                  {renderVendorMultiSelect('المصانع', factories, selectedFactoryIds, (id) =>
+                    setSelectedFactoryIds((prev) => toggleVendorId(prev, id))
+                  )}
+                </>
               )}
               <label className="flex items-center gap-2 text-xs">
                 <input
@@ -961,16 +1094,9 @@ export default function OrderDetailPage({ orderId }: { orderId: string }) {
               className="text-xs text-zinc-400 underline"
               onClick={(e) => {
                 e.preventDefault();
-                fetch(`/api/v1/planning-runs/${selectedRunId}/export`, {
-                  headers: { Authorization: `Bearer ${getToken()}` },
-                })
-                  .then((r) => r.blob())
-                  .then((b) => {
-                    const a = document.createElement('a');
-                    a.href = URL.createObjectURL(b);
-                    a.download = `planning-${order.orderNo}.xlsx`;
-                    a.click();
-                  });
+                downloadBlob(`/planning-runs/${selectedRunId}/export`, `planning-${order.orderNo}.xlsx`).catch((err) =>
+                  setStatusMsg(err instanceof Error ? err.message : 'فشل التصدير')
+                );
               }}
             >
               تصدير Excel للنتائج
@@ -1153,13 +1279,41 @@ export default function OrderDetailPage({ orderId }: { orderId: string }) {
           <div className="rounded-xl border border-zinc-800 p-4 bg-zinc-900">
             <p className="text-xs font-medium mb-2">📐 الألوان والمقاسات</p>
             {writable && (
-              <div className="flex gap-2 mb-2">
-                <button type="button" onClick={addColor} className="text-xs px-2 py-1 border border-zinc-700 rounded">
+              <div className="grid sm:grid-cols-2 gap-2 mb-2">
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    addColor();
+                  }}
+                  className="flex gap-2"
+                >
+                  <input
+                    value={newColor}
+                    onChange={(e) => setNewColor(e.target.value)}
+                    placeholder="لون جديد"
+                    className="flex-1 rounded bg-zinc-950 border border-zinc-800 px-2 py-1 text-xs"
+                  />
+                  <button type="submit" className="text-xs px-2 py-1 border border-zinc-700 rounded">
                   + لون
-                </button>
-                <button type="button" onClick={addSize} className="text-xs px-2 py-1 border border-zinc-700 rounded">
+                  </button>
+                </form>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    addSize();
+                  }}
+                  className="flex gap-2"
+                >
+                  <input
+                    value={newSize}
+                    onChange={(e) => setNewSize(e.target.value)}
+                    placeholder="مقاس جديد"
+                    className="flex-1 rounded bg-zinc-950 border border-zinc-800 px-2 py-1 text-xs"
+                  />
+                  <button type="submit" className="text-xs px-2 py-1 border border-zinc-700 rounded">
                   + مقاس
-                </button>
+                  </button>
+                </form>
               </div>
             )}
             {(order.colors.length > 0 || order.sizes.length > 0) && (
@@ -1197,44 +1351,67 @@ export default function OrderDetailPage({ orderId }: { orderId: string }) {
                           {s}
                         </th>
                       ))}
+                      <th className="border border-zinc-800 p-1">الإجمالي</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {order.colors.map((col) => (
-                      <tr key={col}>
-                        <td className="border border-zinc-800 p-1 text-end" dir="rtl">
-                          {col}
-                        </td>
-                        {order.sizes.map((s) => (
-                          <td key={s} className="border border-zinc-800 p-0">
-                            <input
-                              type="number"
-                              min={0}
-                              disabled={!writable}
-                              className="w-full text-center bg-transparent p-1 outline-none disabled:opacity-60"
-                              value={matrix[`${col}|${s}`] || ''}
-                              onChange={(e) => setCell(col, s, parseInt(e.target.value) || 0)}
-                            />
+                    {order.colors.map((col) => {
+                      const rowTotal = order.sizes.reduce((sum, size) => sum + (matrix[`${col}|${size}`] || 0), 0);
+                      return (
+                        <tr key={col}>
+                          <td className="border border-zinc-800 p-1 text-end" dir="rtl">
+                            {col}
                           </td>
-                        ))}
-                      </tr>
-                    ))}
+                          {order.sizes.map((s) => (
+                            <td key={s} className="border border-zinc-800 p-0">
+                              <input
+                                type="number"
+                                min={0}
+                                disabled={!writable}
+                                className="w-full text-center bg-transparent p-1 outline-none disabled:opacity-60"
+                                value={matrix[`${col}|${s}`] || ''}
+                                onChange={(e) => setCell(col, s, parseInt(e.target.value) || 0)}
+                              />
+                            </td>
+                          ))}
+                          <td className="border border-zinc-800 p-1 text-center font-semibold">{rowTotal}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
+                  <tfoot>
+                    <tr className="bg-zinc-950 font-semibold">
+                      <td className="border border-zinc-800 p-1 text-end" dir="rtl">الإجمالي</td>
+                      {order.sizes.map((size) => (
+                        <td key={size} className="border border-zinc-800 p-1 text-center">
+                          {order.colors.reduce((sum, color) => sum + (matrix[`${color}|${size}`] || 0), 0)}
+                        </td>
+                      ))}
+                      <td className="border border-zinc-800 p-1 text-center">{order.totalQty}</td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             )}
           </div>
 
           <div className="rounded-xl border border-zinc-800 p-4 bg-zinc-900">
-            <p className="text-xs font-medium mb-2">🖼 صور الموديل</p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-medium">🖼 صور الموديل</p>
+              <span className="text-[10px] text-zinc-500">{order.photos.length ? `${order.photos.length} صورة` : 'لا توجد صور'}</span>
+            </div>
             {writable && (
-              <input
-                type="file"
-                multiple
-                accept="image/*"
-                onChange={(e) => uploadPhotos(e.target.files)}
-                className="text-xs w-full"
-              />
+              <label className="block border border-dashed border-zinc-700 rounded-xl p-4 text-center text-xs text-zinc-500 cursor-pointer hover:bg-zinc-950">
+                ارفع صور الموديل هنا
+                <span className="block text-[10px] mt-1">صورة واحدة أو أكثر، صور فقط</span>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={(e) => uploadPhotos(e.target.files)}
+                  className="hidden"
+                />
+              </label>
             )}
             <div className="grid grid-cols-2 gap-2 mt-2">
               {order.photos.map((p, i) => (
@@ -1358,7 +1535,7 @@ export default function OrderDetailPage({ orderId }: { orderId: string }) {
                   <p className="text-[10px] text-zinc-500">
                     مخطط: {s.days} يوم · {Number(s.cost).toFixed(0)} تكلفة
                   </p>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="grid md:grid-cols-4 gap-2 text-xs">
                     <label>
                       أيام فعلية
                       <input
@@ -1391,6 +1568,45 @@ export default function OrderDetailPage({ orderId }: { orderId: string }) {
                         }
                       />
                     </label>
+                    <label>
+                      تاريخ الإكمال
+                      <input
+                        type="date"
+                        disabled={!writable}
+                        className="w-full mt-1 rounded bg-zinc-950 border border-zinc-800 px-2 py-1 disabled:opacity-50"
+                        value={actualsForm[s.id]?.actualCompletionDate ?? ''}
+                        onChange={(e) =>
+                          setActualsForm((prev) => ({
+                            ...prev,
+                            [s.id]: {
+                              ...prev[s.id],
+                              actualDays: prev[s.id]?.actualDays ?? String(s.days),
+                              actualCost: prev[s.id]?.actualCost ?? String(s.cost),
+                              actualCompletionDate: e.target.value,
+                            },
+                          }))
+                        }
+                      />
+                    </label>
+                    <label>
+                      ملاحظات
+                      <input
+                        disabled={!writable}
+                        className="w-full mt-1 rounded bg-zinc-950 border border-zinc-800 px-2 py-1 disabled:opacity-50"
+                        value={actualsForm[s.id]?.notes ?? ''}
+                        onChange={(e) =>
+                          setActualsForm((prev) => ({
+                            ...prev,
+                            [s.id]: {
+                              ...prev[s.id],
+                              actualDays: prev[s.id]?.actualDays ?? String(s.days),
+                              actualCost: prev[s.id]?.actualCost ?? String(s.cost),
+                              notes: e.target.value,
+                            },
+                          }))
+                        }
+                      />
+                    </label>
                   </div>
                 </div>
               ))}
@@ -1413,6 +1629,8 @@ export default function OrderDetailPage({ orderId }: { orderId: string }) {
                   <th>المورد</th>
                   <th>مخطط/فعلي أيام</th>
                   <th>مخطط/فعلي تكلفة</th>
+                  <th>تاريخ الإكمال</th>
+                  <th>ملاحظات</th>
                 </tr>
               </thead>
               <tbody>
@@ -1425,6 +1643,8 @@ export default function OrderDetailPage({ orderId }: { orderId: string }) {
                     <td>
                       {a.plannedCost}/{a.actualCost}
                     </td>
+                    <td>{a.actualCompletionDate ? a.actualCompletionDate.split('T')[0] : '-'}</td>
+                    <td>{a.notes || '-'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1448,16 +1668,9 @@ export default function OrderDetailPage({ orderId }: { orderId: string }) {
                     className="text-blue-400"
                     onClick={(e) => {
                       e.preventDefault();
-                      fetch(`/api/v1/orders/${orderId}/pdf-exports/${p.id}/download`, {
-                        headers: { Authorization: `Bearer ${getToken()}` },
-                      })
-                        .then((r) => r.blob())
-                        .then((b) => {
-                          const a = document.createElement('a');
-                          a.href = URL.createObjectURL(b);
-                          a.download = p.filename;
-                          a.click();
-                        });
+                      downloadBlob(`/orders/${orderId}/pdf-exports/${p.id}/download`, p.filename).catch((err) =>
+                        setStatusMsg(err instanceof Error ? err.message : 'فشل التحميل')
+                      );
                     }}
                   >
                     تحميل

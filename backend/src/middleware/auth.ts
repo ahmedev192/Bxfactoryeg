@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { UserRole } from '@prisma/client';
 import { verifyToken, JwtPayload } from '../lib/jwt';
 import { canView, canWrite, canManageUsers, canExportPdf, canPlan } from '../lib/audit';
+import { prisma } from '../lib/prisma';
 
 export interface AuthRequest extends Request {
   user?: JwtPayload;
@@ -13,8 +14,25 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
     return res.status(401).json({ error: 'غير مصرح' });
   }
   try {
-    req.user = verifyToken(header.slice(7));
-    next();
+    const tokenPayload = verifyToken(header.slice(7));
+    prisma.user
+      .findUnique({ where: { id: tokenPayload.userId } })
+      .then((user) => {
+        if (!user || !user.isActive) {
+          return res.status(401).json({ error: 'المستخدم غير مفعل' });
+        }
+        if (user.tokenVersion !== tokenPayload.tokenVersion) {
+          return res.status(401).json({ error: 'انتهت صلاحية الجلسة' });
+        }
+        req.user = {
+          userId: user.id,
+          email: user.email,
+          role: user.role,
+          tokenVersion: user.tokenVersion,
+        };
+        next();
+      })
+      .catch(next);
   } catch {
     return res.status(401).json({ error: 'رمز غير صالح' });
   }

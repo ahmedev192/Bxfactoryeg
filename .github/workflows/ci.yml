@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: production_ops
+          MYSQL_USER: app
+          MYSQL_PASSWORD: app_secret
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      DATABASE_URL: mysql://app:app_secret@127.0.0.1:3306/production_ops
+      JWT_SECRET: ci-secret-at-least-32-characters-long
+      NODE_ENV: test
+      FRONTEND_URL: http://localhost:5173
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate -w backend
+      - run: npx prisma validate --schema backend/prisma/schema.prisma
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build

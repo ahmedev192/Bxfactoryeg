@@ -4,20 +4,27 @@ import { authMiddleware, AuthRequest, requireWrite, requireView } from '../middl
 import { logAudit } from '../lib/audit';
 import { toNumber } from '../lib/utils';
 import { param } from '../lib/param';
+import { asyncHandler, ApiError, validateBody } from '../lib/http';
+import { vendorCreateSchema, vendorPatchSchema } from '../lib/schemas';
 
 function vendorBody(body: Record<string, unknown>) {
-  return {
-    name: String(body.name),
-    processingDays: Number(body.processingDays) || 1,
-    costPerUnit: Number(body.costPerUnit) || 0,
-    fixedCost: Number(body.fixedCost) || 0,
-    confidencePct: Number(body.confidencePct) ?? 80,
-    isActive: body.isActive !== false,
-    isSplittable: Boolean(body.isSplittable),
-    minSplitPct: Number(body.minSplitPct) || 10,
-    maxSplits: Number(body.maxSplits) || 2,
-    notes: body.notes ? String(body.notes) : null,
-  };
+  const allowed = [
+    'name',
+    'processingDays',
+    'costPerUnit',
+    'fixedCost',
+    'confidencePct',
+    'isActive',
+    'isSplittable',
+    'minSplitPct',
+    'maxSplits',
+    'notes',
+  ] as const;
+  const data: Record<string, unknown> = {};
+  for (const key of allowed) {
+    if (key in body) data[key] = key === 'notes' ? body[key] || null : body[key];
+  }
+  return data;
 }
 
 function serializeFactory(f: Awaited<ReturnType<typeof prisma.factory.findFirst>>) {
@@ -35,25 +42,28 @@ function serializeFactory(f: Awaited<ReturnType<typeof prisma.factory.findFirst>
 const router = Router();
 router.use(authMiddleware, requireView);
 
-router.get('/factories', async (req, res) => {
+router.get('/factories', asyncHandler(async (req, res) => {
   const search = String(req.query.search || '');
+  const take = Math.min(Number(req.query.take) || 100, 500);
   const rows = await prisma.factory.findMany({
     where: search ? { name: { contains: search } } : undefined,
     orderBy: { name: 'asc' },
+    take,
   });
   res.json(rows.map(serializeFactory));
-});
+}));
 
-router.post('/factories', requireWrite, async (req: AuthRequest, res) => {
-  const data = { ...vendorBody(req.body), categories: req.body.categories || null, capacityPerDay: req.body.capacityPerDay || null };
-  const row = await prisma.factory.create({ data });
+router.post('/factories', requireWrite, asyncHandler(async (req: AuthRequest, res) => {
+  const body = validateBody(vendorCreateSchema, req.body);
+  const data = { ...vendorBody(body), categories: body.categories || null, capacityPerDay: body.capacityPerDay || null };
+  const row = await prisma.factory.create({ data: data as Parameters<typeof prisma.factory.create>[0]['data'] });
   await logAudit(req.user!.userId, 'CREATE', 'Factory', row.id);
   res.status(201).json(serializeFactory(row));
-});
+}));
 
-router.post('/factories/:id/duplicate', requireWrite, async (req: AuthRequest, res) => {
+router.post('/factories/:id/duplicate', requireWrite, asyncHandler(async (req: AuthRequest, res) => {
   const src = await prisma.factory.findUnique({ where: { id: param(req.params.id) } });
-  if (!src) return res.status(404).json({ error: 'غير موجود' });
+  if (!src) throw new ApiError(404, 'غير موجود');
   const row = await prisma.factory.create({
     data: {
       name: `${src.name} (نسخة)`,
@@ -70,48 +80,53 @@ router.post('/factories/:id/duplicate', requireWrite, async (req: AuthRequest, r
       notes: src.notes,
     },
   });
+  await logAudit(req.user!.userId, 'CREATE', 'Factory', row.id);
   res.status(201).json(serializeFactory(row));
-});
+}));
 
-router.patch('/factories/:id', requireWrite, async (req: AuthRequest, res) => {
+router.patch('/factories/:id', requireWrite, asyncHandler(async (req: AuthRequest, res) => {
   const id = param(req.params.id);
+  const body = validateBody(vendorPatchSchema, req.body);
   const row = await prisma.factory.update({
     where: { id },
     data: {
-      ...vendorBody(req.body),
-      ...(req.body.categories !== undefined ? { categories: req.body.categories || null } : {}),
-      ...(req.body.capacityPerDay !== undefined ? { capacityPerDay: req.body.capacityPerDay || null } : {}),
-    },
+      ...vendorBody(body),
+      ...(body.categories !== undefined ? { categories: body.categories || null } : {}),
+      ...(body.capacityPerDay !== undefined ? { capacityPerDay: body.capacityPerDay || null } : {}),
+    } as Parameters<typeof prisma.factory.update>[0]['data'],
   });
   await logAudit(req.user!.userId, 'UPDATE', 'Factory', row.id);
   res.json(serializeFactory(row));
-});
+}));
 
-router.delete('/factories/:id', requireWrite, async (req: AuthRequest, res) => {
+router.delete('/factories/:id', requireWrite, asyncHandler(async (req: AuthRequest, res) => {
   const id = param(req.params.id);
   await prisma.factory.delete({ where: { id } });
   await logAudit(req.user!.userId, 'DELETE', 'Factory', id);
   res.status(204).send();
-});
+}));
 
-router.get('/printing-places', async (req, res) => {
+router.get('/printing-places', asyncHandler(async (req, res) => {
   const search = String(req.query.search || '');
+  const take = Math.min(Number(req.query.take) || 100, 500);
   const rows = await prisma.printingPlace.findMany({
     where: search ? { name: { contains: search } } : undefined,
     orderBy: { name: 'asc' },
+    take,
   });
   res.json(rows.map((r) => ({ ...r, processingDays: toNumber(r.processingDays), costPerUnit: toNumber(r.costPerUnit), fixedCost: toNumber(r.fixedCost), confidencePct: toNumber(r.confidencePct) })));
-});
+}));
 
-router.post('/printing-places', requireWrite, async (req: AuthRequest, res) => {
-  const row = await prisma.printingPlace.create({ data: { ...vendorBody(req.body), printTypes: req.body.printTypes || null } });
+router.post('/printing-places', requireWrite, asyncHandler(async (req: AuthRequest, res) => {
+  const body = validateBody(vendorCreateSchema, req.body);
+  const row = await prisma.printingPlace.create({ data: { ...vendorBody(body), printTypes: body.printTypes || null } as Parameters<typeof prisma.printingPlace.create>[0]['data'] });
   await logAudit(req.user!.userId, 'CREATE', 'PrintingPlace', row.id);
   res.status(201).json(row);
-});
+}));
 
-router.post('/printing-places/:id/duplicate', requireWrite, async (req: AuthRequest, res) => {
+router.post('/printing-places/:id/duplicate', requireWrite, asyncHandler(async (req: AuthRequest, res) => {
   const src = await prisma.printingPlace.findUnique({ where: { id: param(req.params.id) } });
-  if (!src) return res.status(404).json({ error: 'غير موجود' });
+  if (!src) throw new ApiError(404, 'غير موجود');
   const row = await prisma.printingPlace.create({
     data: {
       name: `${src.name} (نسخة)`,
@@ -129,55 +144,66 @@ router.post('/printing-places/:id/duplicate', requireWrite, async (req: AuthRequ
   });
   await logAudit(req.user!.userId, 'CREATE', 'PrintingPlace', row.id);
   res.status(201).json(row);
-});
+}));
 
-router.patch('/printing-places/:id', requireWrite, async (req: AuthRequest, res) => {
+router.patch('/printing-places/:id', requireWrite, asyncHandler(async (req: AuthRequest, res) => {
   const id = param(req.params.id);
+  const body = validateBody(vendorPatchSchema, req.body);
   const row = await prisma.printingPlace.update({
     where: { id },
     data: {
-      ...vendorBody(req.body),
-      ...(req.body.printTypes !== undefined ? { printTypes: req.body.printTypes || null } : {}),
-    },
+      ...vendorBody(body),
+      ...(body.printTypes !== undefined ? { printTypes: body.printTypes || null } : {}),
+    } as Parameters<typeof prisma.printingPlace.update>[0]['data'],
   });
+  await logAudit(req.user!.userId, 'UPDATE', 'PrintingPlace', row.id);
   res.json(row);
-});
+}));
 
-router.delete('/printing-places/:id', requireWrite, async (req: AuthRequest, res) => {
-  await prisma.printingPlace.delete({ where: { id: param(req.params.id) } });
+router.delete('/printing-places/:id', requireWrite, asyncHandler(async (req: AuthRequest, res) => {
+  const id = param(req.params.id);
+  await prisma.printingPlace.delete({ where: { id } });
+  await logAudit(req.user!.userId, 'DELETE', 'PrintingPlace', id);
   res.status(204).send();
-});
+}));
 
-router.get('/fabric-suppliers', async (req, res) => {
+router.get('/fabric-suppliers', asyncHandler(async (req, res) => {
   const search = String(req.query.search || '');
+  const take = Math.min(Number(req.query.take) || 100, 500);
   const rows = await prisma.fabricSupplier.findMany({
     where: search ? { name: { contains: search } } : undefined,
     orderBy: { name: 'asc' },
+    take,
   });
   res.json(rows);
-});
+}));
 
-router.post('/fabric-suppliers', requireWrite, async (req: AuthRequest, res) => {
-  const row = await prisma.fabricSupplier.create({ data: { ...vendorBody(req.body), moq: req.body.moq || null } });
+router.post('/fabric-suppliers', requireWrite, asyncHandler(async (req: AuthRequest, res) => {
+  const body = validateBody(vendorCreateSchema, req.body);
+  const row = await prisma.fabricSupplier.create({ data: { ...vendorBody(body), moq: body.moq || null } as Parameters<typeof prisma.fabricSupplier.create>[0]['data'] });
   await logAudit(req.user!.userId, 'CREATE', 'FabricSupplier', row.id);
   res.status(201).json(row);
-});
+}));
 
-router.patch('/fabric-suppliers/:id', requireWrite, async (req: AuthRequest, res) => {
+router.patch('/fabric-suppliers/:id', requireWrite, asyncHandler(async (req: AuthRequest, res) => {
   const id = param(req.params.id);
+  const body = validateBody(vendorPatchSchema, req.body);
   const row = await prisma.fabricSupplier.update({
     where: { id },
     data: {
-      ...vendorBody(req.body),
-      ...(req.body.moq !== undefined ? { moq: req.body.moq || null } : {}),
-    },
+      ...vendorBody(body),
+      ...(body.moq !== undefined ? { moq: body.moq || null } : {}),
+    } as Parameters<typeof prisma.fabricSupplier.update>[0]['data'],
   });
+  await logAudit(req.user!.userId, 'UPDATE', 'FabricSupplier', row.id);
   res.json(row);
-});
+}));
 
-router.delete('/fabric-suppliers/:id', requireWrite, async (req: AuthRequest, res) => {
-  await prisma.fabricSupplier.delete({ where: { id: param(req.params.id) } });
+router.delete('/fabric-suppliers/:id', requireWrite, asyncHandler(async (req: AuthRequest, res) => {
+  const id = param(req.params.id);
+  await prisma.fabricSupplier.delete({ where: { id } });
+  await logAudit(req.user!.userId, 'DELETE', 'FabricSupplier', id);
   res.status(204).send();
-});
+}));
 
 export default router;

@@ -6,15 +6,13 @@ Unified Arabic RTL web platform for production order PDF release and operations 
 
 - **Frontend:** React + TypeScript + Vite + Tailwind CSS v4 + React Flow
 - **Backend:** Node.js + Express + Prisma
-- **Database:** MySQL 8 (production) / SQLite (local dev without Docker)
+- **Database:** MySQL 8 via Prisma migrations
 
 ## Quick Start
 
 ### 1. Database
 
-**Production (MySQL):** start Docker then set `DATABASE_URL=mysql://...` in `backend/.env` and change `provider` in `prisma/schema.prisma` to `mysql`.
-
-**Local dev (SQLite, default):** no Docker required — uses `file:./dev.db`.
+Start MySQL with Docker, then set `DATABASE_URL=mysql://...` in `backend/.env`. The Prisma datasource is MySQL.
 
 ### 2. Install dependencies
 
@@ -26,7 +24,7 @@ npm install
 
 ```bash
 cd backend
-npm run db:push
+npm run db:migrate
 npm run db:seed
 ```
 
@@ -43,8 +41,11 @@ npm run dev
 
 ### Default login
 
+Development seed only:
 - **Admin:** admin@company.com / admin123
 - **Planner:** planner@company.com / planner123
+
+Production seed requires `SEED_ADMIN_EMAIL` and a strong `SEED_ADMIN_PASSWORD`; hardcoded demo users are not created in production.
 
 ## Features
 
@@ -58,10 +59,11 @@ npm run dev
 
 ### Module B — Route Optimization
 - Master data: factories, printing places, fabric suppliers
+- Generic workflow planner: stages, workflow templates, process resources, quantity thresholds
 - 4+ scenarios: fastest, cheapest, balanced, most reliable, custom weights
 - Vendor splitting, working calendar, transport buffers
 - React Flow route graph visualization
-- Comparison table with P50/P90 confidence
+- Comparison table with P50/P90/P95 confidence and action-plan Excel export
 - Scenario → production PDF handoff
 - Historical actuals + vendor learning
 - Excel import/export
@@ -70,6 +72,7 @@ npm run dev
 - JWT auth + RBAC (Admin, Planner, Production Manager, Viewer)
 - Dashboard with at-risk orders and vendor scorecard
 - Field templates, audit logs, reports
+- Authenticated private uploads for photos/PDF files
 - WhatsApp/email PDF share links
 
 ## Project Structure

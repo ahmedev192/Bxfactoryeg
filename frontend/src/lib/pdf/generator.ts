@@ -46,7 +46,8 @@ async function loadArabicFont(doc: jsPDF): Promise<boolean> {
   }
   try {
     if (!fontBase64) {
-      const res = await fetch('https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/amiri/Amiri-Regular.ttf');
+      const res = await fetch('/fonts/Amiri-Regular.ttf');
+      if (!res.ok) throw new Error('Local Arabic font not found');
       fontBase64 = arrayBufferToBase64(await res.arrayBuffer());
     }
     doc.addFileToVFS('Amiri-Regular.ttf', fontBase64);

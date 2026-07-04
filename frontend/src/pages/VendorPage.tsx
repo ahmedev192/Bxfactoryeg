@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, getToken } from '../lib/api';
+import { api, downloadBlob } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
-import { canWrite } from '../lib/rbac';
+import { canAdmin, canWrite } from '../lib/rbac';
 
 interface Vendor {
   id: string;
@@ -43,6 +43,7 @@ const inputCls = 'rounded bg-zinc-950 border border-zinc-800 px-2 py-1.5 text-sm
 export default function VendorPage({ endpoint }: { endpoint: Endpoint }) {
   const { user } = useAuth();
   const write = user ? canWrite(user.role) : false;
+  const admin = user ? canAdmin(user.role) : false;
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [rows, setRows] = useState<Vendor[]>([]);
@@ -149,14 +150,9 @@ export default function VendorPage({ endpoint }: { endpoint: Endpoint }) {
   }
 
   function exportExcel() {
-    fetch('/api/v1/master-data/export', { headers: { Authorization: `Bearer ${getToken()}` } })
-      .then((r) => r.blob())
-      .then((b) => {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(b);
-        a.download = 'master-data.xlsx';
-        a.click();
-      });
+    downloadBlob('/master-data/export', 'master-data.xlsx').catch((err) =>
+      setImportMsg(err instanceof Error ? err.message : 'فشل التصدير')
+    );
   }
 
   return (
@@ -173,7 +169,7 @@ export default function VendorPage({ endpoint }: { endpoint: Endpoint }) {
         <button type="button" onClick={exportExcel} className="px-3 py-2 rounded-lg border border-zinc-700 text-xs">
           تصدير Excel
         </button>
-        {write && (
+        {admin && (
           <>
             <label className="px-3 py-2 rounded-lg border border-zinc-700 text-xs cursor-pointer">
               {importing ? 'جاري الاستيراد...' : 'استيراد Excel'}

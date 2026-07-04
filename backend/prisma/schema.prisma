@@ -35,6 +35,7 @@ enum StepType {
   FABRIC
   PRINT
   FACTORY
+  GENERIC
 }
 
 enum FieldType {
@@ -49,6 +50,7 @@ enum VendorType {
   FACTORY
   PRINTING_PLACE
   FABRIC_SUPPLIER
+  PROCESS_RESOURCE
 }
 
 model User {
@@ -57,6 +59,11 @@ model User {
   passwordHash String
   name         String
   role         UserRole      @default(PLANNER)
+  isActive     Boolean       @default(true)
+  tokenVersion Int           @default(0)
+  passwordChangedAt DateTime?
+  failedLoginCount Int       @default(0)
+  lockedUntil  DateTime?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   orders       Order[]
@@ -199,16 +206,21 @@ model PlanningRun {
   id              String     @id @default(uuid())
   orderId         String
   runById         String
+  workflowId      String?
   deadline        DateTime
   quantity        Int
   customWeights   String?    @db.Text
   constraintsJson String?    @db.Text
+  monteCarloTrials Int       @default(1000)
+  maxScenarios    Int        @default(7)
   createdAt       DateTime   @default(now())
   order           Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
   runBy           User       @relation(fields: [runById], references: [id])
+  workflow        WorkflowTemplate? @relation(fields: [workflowId], references: [id])
   scenarios       Scenario[]
 
   @@index([orderId])
+  @@index([workflowId])
 }
 
 model Scenario {
@@ -218,8 +230,13 @@ model Scenario {
   totalDays       Int
   totalCost       Decimal      @db.Decimal(12, 2)
   certaintyPct    Decimal      @db.Decimal(5, 2)
+  p5Days          Int?
   p50Days         Int?
   p90Days         Int?
+  p95Days         Int?
+  onTimePct       Decimal?     @db.Decimal(5, 2)
+  isRecommended   Boolean      @default(false)
+  rankLabel       String?
   meetsDeadline   Boolean
   splitCount      Int          @default(0)
   deadlineRiskPct Decimal?     @db.Decimal(5, 2)
@@ -239,12 +256,16 @@ model RouteStep {
   vendorType    VendorType
   vendorId      String
   vendorName    String
+  stageId       String?
+  stageName     String?
   startDate     DateTime
   endDate       DateTime
+  p95EndDate    DateTime?
   days          Int
   cost          Decimal         @db.Decimal(12, 2)
   confidencePct Decimal         @db.Decimal(5, 2)
   parallelGroup Int?
+  isCritical    Boolean         @default(false)
   scenario      Scenario        @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
   splits        RouteSplit[]
   actuals       ActualPerformance[]
@@ -278,12 +299,16 @@ model ActualPerformance {
   actualDays   Int
   plannedCost  Decimal    @db.Decimal(12, 2)
   actualCost   Decimal    @db.Decimal(12, 2)
+  actualCompletionDate DateTime?
+  notes        String?    @db.Text
   recordedAt   DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
   order        Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
   routeStep    RouteStep? @relation(fields: [routeStepId], references: [id])
 
   @@index([orderId])
   @@index([vendorId])
+  @@unique([orderId, routeStepId])
 }
 
 model VendorStatistics {
@@ -321,6 +346,86 @@ model FieldTemplateItem {
   template   FieldTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
   @@index([templateId])
+}
+
+model Stage {
+  id          String              @id @default(uuid())
+  name        String              @unique
+  description String?             @db.Text
+  isActive    Boolean             @default(true)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  workflowMemberships WorkflowStepStage[]
+  processResources ProcessResource[]
+}
+
+model WorkflowTemplate {
+  id          String         @id @default(uuid())
+  name        String
+  description String?        @db.Text
+  isActive    Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  steps       WorkflowStep[]
+  planningRuns PlanningRun[]
+}
+
+model WorkflowStep {
+  id          String              @id @default(uuid())
+  workflowId  String
+  sortOrder   Int
+  workflow    WorkflowTemplate    @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  stages      WorkflowStepStage[]
+
+  @@index([workflowId])
+  @@unique([workflowId, sortOrder])
+}
+
+model WorkflowStepStage {
+  id             String        @id @default(uuid())
+  workflowStepId String
+  stageId        String
+  sortOrder      Int           @default(0)
+  workflowStep   WorkflowStep  @relation(fields: [workflowStepId], references: [id], onDelete: Cascade)
+  stage          Stage         @relation(fields: [stageId], references: [id])
+
+  @@index([workflowStepId])
+  @@index([stageId])
+  @@unique([workflowStepId, stageId])
+}
+
+model ProcessResource {
+  id               String                     @id @default(uuid())
+  name             String
+  stageId          String
+  timeOptimistic   Decimal                    @db.Decimal(10, 2)
+  timeMostLikely   Decimal                    @db.Decimal(10, 2)
+  timePessimistic  Decimal                    @db.Decimal(10, 2)
+  cost             Decimal                    @db.Decimal(12, 2)
+  costType         String                     @default("PER_UNIT")
+  confidencePct    Decimal                    @default(80) @db.Decimal(5, 2)
+  isActive         Boolean                    @default(true)
+  isSplittable     Boolean                    @default(false)
+  minSplitPct      Decimal                    @default(10) @db.Decimal(5, 2)
+  maxSplits        Int                        @default(2)
+  notes            String?                    @db.Text
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+  stage            Stage                      @relation(fields: [stageId], references: [id])
+  thresholds       ProcessQuantityThreshold[]
+
+  @@index([stageId])
+}
+
+model ProcessQuantityThreshold {
+  id                String          @id @default(uuid())
+  processResourceId String
+  minQty            Int
+  addDays           Decimal         @db.Decimal(10, 2)
+  processResource   ProcessResource @relation(fields: [processResourceId], references: [id], onDelete: Cascade)
+
+  @@index([processResourceId])
+  @@unique([processResourceId, minQty])
 }
 
 model PdfExport {

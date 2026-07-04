@@ -10,28 +10,40 @@ async function main() {
     update: {},
   });
 
-  const passwordHash = await bcrypt.hash('admin123', 10);
-  await prisma.user.upsert({
-    where: { email: 'admin@company.com' },
-    create: {
-      email: 'admin@company.com',
-      passwordHash,
-      name: 'مدير النظام',
-      role: UserRole.ADMIN,
-    },
-    update: {},
-  });
+  const isProduction = process.env.NODE_ENV === 'production';
+  const adminEmail = process.env.SEED_ADMIN_EMAIL || (isProduction ? '' : 'admin@company.com');
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD || (isProduction ? '' : 'admin123');
 
-  await prisma.user.upsert({
-    where: { email: 'planner@company.com' },
-    create: {
-      email: 'planner@company.com',
-      passwordHash: await bcrypt.hash('planner123', 10),
-      name: 'مخطط العمليات',
-      role: UserRole.PLANNER,
-    },
-    update: {},
-  });
+  if (isProduction && (!adminEmail || !adminPassword || adminPassword.length < 12)) {
+    console.log('Production seed skipped: set SEED_ADMIN_EMAIL and a strong SEED_ADMIN_PASSWORD to create the initial admin.');
+  } else {
+    const passwordHash = await bcrypt.hash(adminPassword, 10);
+    await prisma.user.upsert({
+      where: { email: adminEmail },
+      create: {
+        email: adminEmail,
+        passwordHash,
+        name: process.env.SEED_ADMIN_NAME || 'مدير النظام',
+        role: UserRole.ADMIN,
+        passwordChangedAt: new Date(),
+      },
+      update: {},
+    });
+  }
+
+  if (!isProduction) {
+    await prisma.user.upsert({
+      where: { email: 'planner@company.com' },
+      create: {
+        email: 'planner@company.com',
+        passwordHash: await bcrypt.hash('planner123', 10),
+        name: 'مخطط العمليات',
+        role: UserRole.PLANNER,
+        passwordChangedAt: new Date(),
+      },
+      update: {},
+    });
+  }
 
   const factoryCount = await prisma.factory.count();
   if (factoryCount === 0) {
@@ -55,7 +67,7 @@ async function main() {
     });
   }
 
-  console.log('Seed complete. Login: admin@company.com / admin123');
+  console.log(isProduction ? 'Seed complete.' : 'Seed complete. Dev login: admin@company.com / admin123');
 }
 
 main()
