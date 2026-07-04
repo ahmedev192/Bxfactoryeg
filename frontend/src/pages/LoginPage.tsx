@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, setAuth } from '../lib/api';
+import { useAuth } from '../hooks/useAuth';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -8,6 +9,7 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { refresh } = useAuth();
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -19,7 +21,8 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
       setAuth(res.token, res.user);
-      navigate('/');
+      await refresh();
+      navigate('/', { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'فشل الدخول');
     } finally {
