@@ -1,0 +1,2462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Operations Planner v4 — Quantity Thresholds</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f1117;min-height:100vh;color:#e2e8f0}
+.app{padding:24px;max-width:1320px;margin:0 auto;padding-bottom:80px}
+
+.topbar{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;gap:16px;flex-wrap:wrap}
+.topbar h1{font-size:20px;font-weight:500;color:#f1f5f9;letter-spacing:-0.3px}
+.topbar p{font-size:12px;color:#475569;margin-top:4px;line-height:1.6;max-width:600px}
+.topbar-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+.btn{padding:8px 16px;border-radius:8px;border:0.5px solid #2d3448;background:#1a1f2e;color:#94a3b8;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap;transition:all 0.15s}
+.btn:hover{border-color:#3b82f6;color:#60a5fa}
+.btn.primary{background:#1d4ed8;border-color:#1d4ed8;color:#fff}
+.btn.primary:hover{background:#2563eb;border-color:#2563eb;color:#fff}
+.btn.danger:hover{border-color:#f87171;color:#f87171}
+.btn.success{background:#065f46;border-color:#065f46;color:#fff}
+.btn.success:hover{background:#047857;border-color:#047857;color:#fff}
+.btn.small{padding:5px 10px;font-size:11px}
+.btn.tiny{padding:3px 8px;font-size:10px}
+
+.tabs{display:flex;gap:0;border-bottom:0.5px solid #1e2535;margin-bottom:20px;overflow-x:auto}
+.tab{padding:11px 18px;border:none;background:none;color:#64748b;font-size:13px;cursor:pointer;font-family:inherit;border-bottom:2px solid transparent;transition:all 0.15s;white-space:nowrap}
+.tab:hover{color:#94a3b8}
+.tab.active{color:#60a5fa;border-bottom-color:#3b82f6}
+.tab-pane{display:none}
+.tab-pane.active{display:block}
+
+.section{background:#1a1f2e;border:0.5px solid #2d3448;border-radius:12px;padding:20px;margin-bottom:14px}
+.section-title{font-size:11px;font-weight:500;color:#475569;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:14px;display:flex;align-items:center;gap:8px;justify-content:space-between}
+.section-title-left{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.dot{width:3px;height:14px;border-radius:2px;display:inline-block;flex-shrink:0}
+.section h3{font-size:14px;font-weight:500;color:#f1f5f9;margin-bottom:4px}
+.section .desc{font-size:12px;color:#64748b;margin-bottom:14px;line-height:1.6}
+
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.field{margin-bottom:10px}
+.field label{display:block;font-size:12px;color:#94a3b8;margin-bottom:5px}
+.field input,.field select,.field textarea{width:100%;background:#0f1117;border:0.5px solid #2d3448;border-radius:8px;padding:8px 11px;color:#f1f5f9;font-size:13px;outline:none;font-family:inherit;transition:border-color 0.15s}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:#3b82f6}
+.field input[readonly]{color:#475569;border-color:#1e2535}
+.field select option{background:#1a1f2e}
+.field .hint{font-size:11px;color:#475569;margin-top:4px;line-height:1.4}
+.checkbox-row{display:flex;align-items:center;gap:8px;font-size:12px;color:#94a3b8;cursor:pointer;padding:6px 0}
+.checkbox-row input[type=checkbox]{width:14px;height:14px;cursor:pointer;accent-color:#3b82f6}
+
+/* Threshold table inside process form */
+.thresh-section{margin-top:8px;padding:10px;background:#0c1220;border:0.5px solid #1e3a5f;border-radius:7px}
+.thresh-section-title{font-size:11px;color:#93c5fd;margin-bottom:8px;font-weight:500;display:flex;justify-content:space-between;align-items:center}
+.thresh-section-title button{font-size:10px;padding:3px 8px;border:none;background:#1e3a5f;color:#93c5fd;border-radius:4px;cursor:pointer;font-family:inherit}
+.thresh-section-title button:hover{background:#1d4ed8;color:#fff}
+.thresh-row{display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:11px}
+.thresh-row label{font-size:11px;color:#94a3b8;white-space:nowrap}
+.thresh-row input{width:100px;padding:5px 8px;font-size:12px;background:#0f1117;border:0.5px solid #2d3448;border-radius:5px;color:#f1f5f9;font-family:inherit;outline:none}
+.thresh-row input:focus{border-color:#3b82f6}
+.thresh-row .thresh-del{background:none;border:none;color:#475569;cursor:pointer;font-size:13px;padding:2px 6px;border-radius:3px}
+.thresh-row .thresh-del:hover{color:#f87171;background:#1e2535}
+.thresh-empty{font-size:11px;color:#64748b;font-style:italic;padding:6px 0}
+.thresh-badge{display:inline-block;padding:2px 7px;background:#451a03;color:#fbbf24;font-size:10px;border-radius:4px;margin-left:6px}
+.pc-thresh{font-size:10px;color:#fbbf24;margin-top:4px;line-height:1.5}
+
+/* Step builder (parallel groups inside a chain) */
+.steps-builder{padding:12px;background:#0f1117;border:0.5px solid #2d3448;border-radius:8px;min-height:80px}
+.step-row{background:#151a27;border:0.5px solid #2d3448;border-radius:8px;padding:10px;margin-bottom:8px;position:relative}
+.step-row .step-num{position:absolute;top:-8px;left:10px;background:#1e3a5f;color:#93c5fd;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:600;letter-spacing:0.5px}
+.step-row .step-actions{position:absolute;top:8px;right:8px;display:flex;gap:4px}
+.step-stages{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:32px;padding-top:6px}
+.step-stage-chip{background:#1e3a5f;border:0.5px solid #3b82f6;color:#93c5fd;padding:6px 11px;border-radius:7px;font-size:12px;display:flex;align-items:center;gap:7px}
+.step-stage-chip .chip-x{cursor:pointer;color:#60a5fa;font-size:13px;line-height:1;padding:0 2px}
+.step-stage-chip .chip-x:hover{color:#f87171}
+.step-add-stage{display:inline-flex;gap:5px;align-items:center;margin-top:4px}
+.step-add-stage select{background:#0f1117;border:0.5px solid #2d3448;border-radius:6px;padding:5px 8px;color:#cbd5e1;font-size:11px;outline:none;font-family:inherit;min-width:120px}
+.parallel-tag{font-size:10px;color:#fbbf24;background:#1c1506;padding:2px 7px;border-radius:4px;font-weight:500}
+.step-divider{text-align:center;padding:4px 0;font-size:14px;color:#475569}
+
+/* Workflow templates list */
+.wf-list{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.wf-item{background:#0f1117;border:0.5px solid #2d3448;border-radius:8px;padding:11px 13px;transition:all 0.15s;position:relative}
+.wf-item:hover{border-color:#3b82f6}
+.wf-item.editing{border-color:#3b82f6;background:#0c2340}
+.wf-item .wf-name{font-size:13px;font-weight:500;color:#f1f5f9;margin-bottom:6px;cursor:pointer;padding-right:80px}
+.wf-item .wf-chain{font-size:11px;color:#64748b;line-height:1.7;cursor:pointer;display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.wf-item .wf-chain strong{color:#94a3b8}
+.mini-step{display:inline-flex;gap:3px;align-items:center;padding:2px 7px;background:#1a1f2e;border-radius:5px;border:0.5px solid #2d3448}
+.mini-step.parallel{background:#1c1506;border-color:#854f0b;color:#fbbf24}
+.wf-item .wf-actions{position:absolute;top:8px;right:8px;display:flex;gap:4px;opacity:0;transition:opacity 0.15s}
+.wf-item:hover .wf-actions{opacity:1}
+.wf-item.editing .wf-actions{opacity:1}
+
+/* Process library */
+.proc-filters{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.filter-chip{padding:5px 10px;border-radius:6px;border:0.5px solid #2d3448;background:#0f1117;color:#64748b;font-size:11px;cursor:pointer;transition:all 0.15s;font-family:inherit}
+.filter-chip.active{background:#1e3a5f;border-color:#3b82f6;color:#93c5fd}
+.filter-chip:hover{border-color:#3b82f6}
+.proc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-bottom:14px}
+.proc-card{background:#0f1117;border:0.5px solid #2d3448;border-radius:8px;padding:11px 13px;cursor:pointer;transition:all 0.15s;position:relative}
+.proc-card:hover{border-color:#3b82f6}
+.proc-card.editing{border-color:#3b82f6;background:#0c2340}
+.proc-card .pc-name{font-size:13px;font-weight:500;color:#f1f5f9;margin-bottom:4px;padding-right:50px}
+.proc-card .pc-stage{display:inline-block;padding:2px 7px;background:#1e3a5f;color:#93c5fd;font-size:10px;border-radius:4px;margin-bottom:5px}
+.proc-card .pc-meta{font-size:11px;color:#64748b;line-height:1.5}
+.proc-card .pc-actions{position:absolute;top:8px;right:8px;display:flex;gap:4px;opacity:0;transition:opacity 0.15s}
+.proc-card:hover .pc-actions{opacity:1}
+.li-btn{background:none;border:none;color:#475569;cursor:pointer;font-size:12px;padding:2px 6px;border-radius:4px}
+.li-btn:hover{color:#f1f5f9;background:#1e2535}
+.li-btn.del:hover{color:#f87171}
+
+.res-form{background:#0c1220;border:0.5px solid #1e3a5f;border-radius:8px;padding:14px;margin-top:10px}
+.res-form .grid-2,.res-form .grid-3{gap:8px}
+.res-form .field{margin-bottom:8px}
+.res-form .field label{font-size:11px}
+.res-form .field input,.res-form .field select{padding:7px 10px;font-size:12px}
+.res-form .form-actions{display:flex;gap:8px;margin-top:10px}
+.res-form .form-actions button{flex:1}
+
+.empty{font-size:12px;color:#475569;text-align:center;padding:24px 12px;font-style:italic;line-height:1.6}
+
+/* Plan order */
+.workflow-preview{background:#0f1117;border:0.5px solid #2d3448;border-radius:8px;padding:14px;margin-top:8px}
+.preview-step{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px;padding:8px;background:#1a1f2e;border-radius:7px}
+.preview-step.parallel{background:#1c1506;border:0.5px solid #854f0b}
+.preview-step-num{font-size:10px;color:#64748b;font-weight:600;letter-spacing:0.5px;text-transform:uppercase;margin-right:8px}
+.preview-stage-chip{padding:5px 11px;background:#1e3a5f;color:#93c5fd;border-radius:6px;font-size:12px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;border:0.5px solid #1e3a5f;transition:all 0.15s}
+.preview-stage-chip.unticked{background:#0f1117;color:#475569;border-color:#1e2535;text-decoration:line-through;opacity:0.6}
+.preview-stage-chip:hover{border-color:#3b82f6}
+.preview-stage-chip input[type=checkbox]{width:13px;height:13px;accent-color:#3b82f6}
+
+.stage-card{background:#151a27;border:0.5px solid #2d3448;border-radius:9px;padding:13px;margin-bottom:10px}
+.stage-card.disabled{opacity:0.45;pointer-events:none}
+.stage-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px}
+.stage-card-header h5{font-size:13px;color:#f1f5f9;font-weight:500;display:flex;align-items:center;gap:8px}
+.stage-card-header .stage-num{background:#1e3a5f;color:#93c5fd;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:600}
+.stage-card-header .stage-meta{font-size:10px;color:#64748b}
+.stage-cands-row{display:flex;flex-wrap:wrap;gap:6px}
+.cand-pill{padding:6px 11px;background:#0f1117;border:0.5px solid #2d3448;border-radius:7px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:7px;transition:all 0.15s}
+.cand-pill:hover{border-color:#3b82f6}
+.cand-pill.selected{background:#0c2340;border-color:#3b82f6;color:#93c5fd}
+.cand-pill input[type=checkbox]{width:13px;height:13px;accent-color:#3b82f6}
+.cand-pill .cand-meta{font-size:10px;color:#64748b}
+.cand-pill.selected .cand-meta{color:#60a5fa}
+.no-cands{font-size:11px;color:#64748b;font-style:italic}
+
+/* Split quantity panel — visible when 2+ splittable picked at one stage */
+.split-panel{margin-top:10px;padding:10px 12px;background:#0c1220;border:0.5px solid #1e3a5f;border-radius:8px}
+.split-panel-title{font-size:11px;color:#93c5fd;margin-bottom:8px;font-weight:500;display:flex;justify-content:space-between;align-items:center}
+.split-panel-title button{font-size:10px;padding:3px 8px;border:none;background:#1e3a5f;color:#93c5fd;border-radius:4px;cursor:pointer;font-family:inherit}
+.split-panel-title button:hover{background:#1d4ed8;color:#fff}
+.split-row{display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:11px}
+.split-row .split-name{flex:1;color:#cbd5e1}
+.split-row input[type=number]{width:70px;padding:4px 7px;font-size:11px;background:#0f1117;border:0.5px solid #2d3448;border-radius:5px;color:#f1f5f9;font-family:inherit;outline:none}
+.split-row input[type=number]:focus{border-color:#3b82f6}
+.split-row .split-pcs{font-size:10px;color:#475569;width:65px;text-align:right}
+.split-total{font-size:10px;color:#64748b;text-align:right;margin-top:4px}
+.split-total.bad{color:#f87171}
+
+/* Run button */
+.run-btn{width:100%;padding:13px;background:#1d4ed8;border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;margin-top:6px;transition:background 0.15s}
+.run-btn:hover{background:#2563eb}
+.run-btn:disabled{background:#1e293b;color:#475569;cursor:not-allowed}
+
+/* Results */
+.scen-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-bottom:14px}
+.scen-card{background:#0f1117;border:0.5px solid #2d3448;border-radius:10px;padding:14px;cursor:pointer;transition:all 0.15s;position:relative}
+.scen-card:hover{border-color:#3b82f6}
+.scen-card.active{border-color:#3b82f6;background:#0c2340;box-shadow:0 0 0 1px #3b82f6 inset}
+.scen-card .scen-tag{font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.6px;padding:3px 8px;border-radius:5px;display:inline-block;margin-bottom:8px;margin-right:4px}
+.tag-fast{background:#0c2340;color:#60a5fa}
+.tag-cheap{background:#064e3b;color:#34d399}
+.tag-bal{background:#3a0e3f;color:#c084fc}
+.tag-conf{background:#451a03;color:#fbbf24}
+.tag-split{background:#3f1717;color:#f87171}
+.tag-alt{background:#1a1f2e;color:#94a3b8}
+.scen-card h4{font-size:14px;color:#f1f5f9;margin-bottom:10px;font-weight:500}
+.scen-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.scen-stat{font-size:11px;color:#64748b}
+.scen-stat strong{display:block;font-size:14px;color:#f1f5f9;margin-top:2px;font-weight:500}
+.scen-stat strong.blue{color:#60a5fa}
+.scen-stat strong.green{color:#34d399}
+.scen-stat strong.amber{color:#fbbf24}
+.scen-stat strong.red{color:#f87171}
+.scen-route{font-size:11px;color:#64748b;line-height:1.6;border-top:0.5px solid #1e2535;padding-top:8px;margin-top:6px}
+.scen-route strong{color:#94a3b8;font-weight:500}
+
+.cmp-wrap{overflow-x:auto;margin-bottom:14px}
+.cmp-table{width:100%;border-collapse:collapse;min-width:760px}
+.cmp-table th{background:#151a27;font-size:11px;color:#475569;font-weight:400;text-align:left;padding:10px 12px;border-bottom:0.5px solid #2d3448;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap}
+.cmp-table td{padding:11px 12px;font-size:12px;color:#cbd5e1;border-bottom:0.5px solid #1e2535;vertical-align:top}
+.cmp-table tr:hover td{background:#151a27}
+.cmp-table .cmp-name{color:#f1f5f9;font-weight:500;font-size:13px}
+.cmp-table .best{color:#34d399;font-weight:500}
+.cmp-table .worst{color:#f87171}
+.cmp-table .midi{color:#fbbf24}
+
+/* DAG */
+.dag-section{background:#0f1117;border:0.5px solid #2d3448;border-radius:10px;padding:16px;margin-bottom:14px}
+.dag-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:12px;flex-wrap:wrap}
+.dag-header h4{font-size:13px;color:#f1f5f9;font-weight:500}
+.dag-header .dag-meta{font-size:11px;color:#64748b}
+.dag-svg-wrap{background:#0a0d14;border:0.5px solid #1e2535;border-radius:8px;padding:14px;overflow-x:auto}
+.dag-legend{display:flex;gap:16px;margin-top:10px;flex-wrap:wrap;font-size:11px;color:#64748b}
+.dag-legend-item{display:flex;align-items:center;gap:6px}
+.dag-legend-swatch{width:12px;height:12px;border-radius:3px}
+
+/* History */
+.hist-card{background:#0f1117;border:0.5px solid #2d3448;border-radius:10px;padding:14px;margin-bottom:10px;transition:all 0.15s}
+.hist-card:hover{border-color:#3b82f6}
+.hist-top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+.hist-name{font-size:14px;font-weight:500;color:#f1f5f9;flex:1;background:none;border:none;outline:none;font-family:inherit;padding:3px 5px;border-radius:5px;min-width:160px}
+.hist-name:focus{background:#1e2535}
+.hist-date{font-size:11px;color:#475569}
+.hist-actions{display:flex;gap:6px}
+.hist-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}
+.hist-stat{background:#1a1f2e;border-radius:7px;padding:8px 10px}
+.hist-stat .hl{font-size:10px;color:#475569;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px}
+.hist-stat .hv{font-size:13px;color:#f1f5f9;font-weight:500}
+
+.banner{padding:9px 13px;border-radius:8px;font-size:12px;margin-bottom:12px;line-height:1.5}
+.banner.warn{background:#1c1506;border:0.5px solid #854f0b;color:#fbbf24}
+.banner.info{background:#0c2340;border:0.5px solid #1d4ed8;color:#93c5fd}
+.banner.err{background:#3f1717;border:0.5px solid #b91c1c;color:#fca5a5}
+
+.params-row{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:10px;margin-bottom:10px}
+@media (max-width:760px){.params-row{grid-template-columns:1fr 1fr}}
+
+.help-text{font-size:11px;color:#64748b;line-height:1.6;background:#151a27;border-left:2px solid #3b82f6;padding:8px 12px;border-radius:0 7px 7px 0;margin-bottom:12px}
+.help-text strong{color:#94a3b8}
+.muted{color:#475569}
+
+@media (max-width:680px){
+  .grid-2,.grid-3,.grid-4{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ═══ TOP BAR ═══ -->
+  <div class="topbar">
+    <div>
+      <h1>Operations Planner v4</h1>
+      <p>Workflows with parallel groups · per-order stage selection · custom split quantities · <strong style="color:#fbbf24">quantity-based time thresholds</strong> · Excel export.</p>
+    </div>
+    <div class="topbar-actions">
+      <button class="btn success" onclick="exportData()" title="Save your processes, workflows, stages, and history to a backup file. Keep this file safe.">💾 Save backup file</button>
+      <button class="btn" onclick="document.getElementById('importFile').click()" title="Restore from a backup file you previously saved">📂 Load backup file</button>
+      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
+      <button class="btn danger" onclick="resetAll()">Reset all</button>
+    </div>
+  </div>
+
+  <div id="backupReminder" class="banner warn" style="display:none;margin-bottom:14px">
+    ⚠ <strong>Reminder:</strong> Save a backup file before closing the browser. Browser storage can be wiped by clearing cache, switching browsers, or system updates. The "Save backup file" button (top right) downloads everything in one .json file you can keep safe and re-load anytime.
+    <button class="btn small" style="margin-left:10px" onclick="dismissBackupReminder()">Got it, dismiss</button>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="workflows" onclick="switchTab('workflows')">🔗 Workflows</button>
+    <button class="tab" data-tab="processes" onclick="switchTab('processes')">📁 Process library</button>
+    <button class="tab" data-tab="plan" onclick="switchTab('plan')">📋 Plan order</button>
+    <button class="tab" data-tab="results" onclick="switchTab('results')">📊 Scenarios</button>
+    <button class="tab" data-tab="history" onclick="switchTab('history')">🗂 History</button>
+    <button class="tab" data-tab="help" onclick="switchTab('help')">ℹ Help</button>
+  </div>
+
+  <!-- ═══ WORKFLOWS TAB ═══ -->
+  <div class="tab-pane active" id="tab-workflows">
+    <div class="help-text">
+      A <strong>workflow template</strong> is an ordered list of <strong>steps</strong>. Each step contains one or more <strong>stages</strong> — multiple stages in one step run in <strong>parallel</strong>; steps run <strong>sequentially</strong>. Example: <em>Step 1: Fabric → Step 2: Cut → Step 3: [Sew, Print] (parallel) → Step 4: QC → Step 5: Pack</em>. Per-order, you can untick stages to skip them.
+    </div>
+
+    <div class="section">
+      <div class="section-title">
+        <div class="section-title-left"><span class="dot" style="background:#3b82f6"></span>Workflow templates</div>
+        <button class="btn small" onclick="newWorkflow()">+ New template</button>
+      </div>
+      <div id="workflowEditor"></div>
+      <div class="wf-list" id="workflowList"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">
+        <div class="section-title-left"><span class="dot" style="background:#06b6d4"></span>Stages library</div>
+        <span style="font-size:11px;color:#64748b;text-transform:none;letter-spacing:normal">Reusable stage names. Add once, use in any workflow.</span>
+      </div>
+      <div id="stagesLibrary"></div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <input type="text" id="newStageInput" placeholder="New stage name (e.g. Embroidery, Washing, QC)" onkeydown="if(event.key==='Enter')addStage()" style="flex:1;background:#0f1117;border:0.5px solid #2d3448;border-radius:7px;padding:7px 10px;color:#f1f5f9;font-size:12px;outline:none;font-family:inherit">
+        <button class="btn" onclick="addStage()">+ Add stage</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PROCESS LIBRARY TAB ═══ -->
+  <div class="tab-pane" id="tab-processes">
+    <div class="help-text">
+      A <strong>process</strong> is a real resource (factory, print shop, supplier) assigned to one stage. <strong>Splittable</strong> processes can run in parallel with other splittable processes at the same stage in one order — you'll set per-order quantity shares when planning.
+    </div>
+    <div class="section">
+      <div class="section-title">
+        <div class="section-title-left">
+          <span class="dot" style="background:#10b981"></span>Process library
+          <span id="procCount" style="font-size:11px;color:#64748b;text-transform:none;letter-spacing:normal;margin-left:6px"></span>
+        </div>
+        <button class="btn small" onclick="newProcess()">+ New process</button>
+      </div>
+      <div class="proc-filters" id="procFilters"></div>
+      <div id="processEditor"></div>
+      <div class="proc-grid" id="processGrid"></div>
+    </div>
+  </div>
+
+  <!-- ═══ PLAN ORDER TAB ═══ -->
+  <div class="tab-pane" id="tab-plan">
+    <div class="section">
+      <div class="section-title"><div class="section-title-left"><span class="dot" style="background:#f43f5e"></span>Order parameters</div></div>
+      <div class="params-row">
+        <div class="field"><label>Order name / reference</label><input type="text" id="orderName" placeholder="e.g. Hoodie 800pc — Brand X"></div>
+        <div class="field"><label>Quantity (pcs)</label><input type="number" id="orderQty" value="500" min="1" step="50" oninput="onWorkflowPicked()"></div>
+        <div class="field"><label>Order date</label><input type="date" id="orderStart"></div>
+        <div class="field"><label>Deadline</label><input type="date" id="orderDeadline"></div>
+      </div>
+      <div id="deadlineHint" class="hint" style="font-size:11px;color:#64748b;margin-top:-4px"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title"><div class="section-title-left"><span class="dot" style="background:#3b82f6"></span>Workflow</div></div>
+      <div class="field">
+        <label>Pick a workflow template</label>
+        <select id="orderWorkflow" onchange="onWorkflowPicked()"></select>
+      </div>
+      <div id="workflowPreview" class="workflow-preview" style="display:none"></div>
+    </div>
+
+    <div class="section" id="candidatesSection" style="display:none">
+      <div class="section-title"><div class="section-title-left"><span class="dot" style="background:#8b5cf6"></span>Candidates &amp; split shares per stage</div></div>
+      <div class="desc">Tick which processes to consider at each stage. If you tick 2+ splittable processes at the same stage, set quantity shares below to split work between them. Untick a stage at the top to skip it for this order.</div>
+      <div id="stageCandsContainer"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title"><div class="section-title-left"><span class="dot" style="background:#10b981"></span>Simulation settings</div></div>
+      <div class="grid-3">
+        <div class="field">
+          <label>Monte Carlo trials</label>
+          <select id="mcTrials">
+            <option value="1000">1,000 (fast)</option>
+            <option value="5000" selected>5,000 (standard)</option>
+            <option value="10000">10,000 (precise)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Cost vs time priority (balanced scenario)</label>
+          <input type="range" id="balanceWeight" min="0" max="100" value="50" oninput="document.getElementById('balanceLbl').textContent=this.value+'% time / '+(100-this.value)+'% cost'">
+          <div class="hint" id="balanceLbl">50% time / 50% cost</div>
+        </div>
+        <div class="field">
+          <label>Max scenarios to display</label>
+          <select id="maxScens"><option value="5">5</option><option value="7" selected>7</option><option value="10">10</option><option value="15">15</option></select>
+        </div>
+      </div>
+    </div>
+
+    <button class="run-btn" id="runBtn" onclick="runPlanner()">Generate scenarios &amp; routes →</button>
+  </div>
+
+  <!-- ═══ RESULTS TAB ═══ -->
+  <div class="tab-pane" id="tab-results">
+    <div id="resultsContent">
+      <div class="empty" style="padding:60px 0">Run the planner from the <strong style="color:#60a5fa">Plan order</strong> tab to see scenarios.</div>
+    </div>
+  </div>
+
+  <!-- ═══ HISTORY TAB ═══ -->
+  <div class="tab-pane" id="tab-history">
+    <div class="section">
+      <div class="section-title">
+        <div class="section-title-left">
+          <span class="dot" style="background:#a78bfa"></span>Saved orders
+          <span id="storageIndicator" style="font-size:10px;color:#64748b;text-transform:none;letter-spacing:normal;margin-left:8px"></span>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn small" onclick="exportData()" title="Download a JSON backup of all your data">⬇ Backup all data</button>
+          <button class="btn small success" onclick="exportAllHistoryToExcel()">📊 Export all to Excel</button>
+        </div>
+      </div>
+      <div class="desc">Past plans saved for reference. Browser storage is limited (~5 MB) — if you save many orders, oldest may be auto-pruned. Click "Backup all data" regularly to download a safe copy.</div>
+      <div id="historyList"><div class="empty">No saved orders yet.</div></div>
+    </div>
+  </div>
+
+  <!-- ═══ HELP TAB ═══ -->
+  <div class="tab-pane" id="tab-help">
+    <div class="section">
+      <h3>Concept model</h3>
+      <p class="desc">
+        <strong style="color:#93c5fd">Stage</strong> · a unit of work (Cut, Sew, Print, QC…). Defined once in the Stages library.<br>
+        <strong style="color:#93c5fd">Step</strong> · one slot in a workflow. A step contains one stage (sequential) OR multiple stages (parallel — they all run concurrently).<br>
+        <strong style="color:#93c5fd">Workflow template</strong> · ordered list of steps. Steps run in sequence; stages within a step run in parallel.<br>
+        <strong style="color:#93c5fd">Process</strong> · a real resource performing work at one stage. Has 3-point time estimates, cost, confidence %, splittable flag.<br>
+        <strong style="color:#93c5fd">Order</strong> · routes through one workflow. For each stage you (a) decide whether the stage applies, (b) pick candidate processes, (c) set quantity shares if splitting.
+      </p>
+
+      <h3 style="margin-top:14px">Time model (PERT + Monte Carlo + quantity thresholds)</h3>
+      <p class="desc">
+        Each process has 3-point estimates (optimistic / most-likely / pessimistic). The <strong>confidence %</strong> shrinks the spread when sampling. For each scenario, N Monte Carlo trials draw from triangular distributions.<br><br>
+        <strong>Within a step:</strong> step duration = MAX(stage durations) — slowest parallel stage wins.<br>
+        <strong>Within a stage with splits:</strong> stage duration = MAX(branch durations) — slowest split branch wins.<br>
+        <strong>Total project duration:</strong> SUM(step durations) — steps are sequential.<br><br>
+        <strong style="color:#fbbf24">Quantity thresholds (NEW v4):</strong> each process can declare extra days when quantity exceeds set thresholds. The qty that drives the bump is the <em>branch quantity</em> — i.e., the share assigned to that process if split, or the full order qty if not. The highest matching threshold wins (no stacking). Example: Factory A has +2d at 1000 pcs, +5d at 3000 pcs. If a 4000-pc order goes 100% to A, time = base + 5d. If split 60/40, A gets 2400 pcs (+2d bump), B gets 1600 pcs (its own threshold table applies).<br><br>
+        <strong>Note on split quantities:</strong> per your config, time does NOT scale linearly with quantity. Each branch takes its base time PLUS any threshold bump. Cost DOES scale with quantity share.
+      </p>
+
+      <h3 style="margin-top:14px">Excel export — simple action format</h3>
+      <p class="desc">
+        After running the planner, click <strong>📊 Export this run to Excel</strong> on the Scenarios tab. The .xlsx contains:
+        <br><br>
+        • <strong>Order Brief</strong> — quantity, deadline, workflow, with blanks to fill in order number and brand name<br>
+        • <strong>Scenarios</strong> — bullet-point comparison, recommended scenario marked with ⭐<br>
+        • <strong>Action Plan — Scenario N</strong> (one per scenario) — step-by-step list with stage start/deadline dates, "Done?" checkbox, and "Actual completion date" column for tracking actuals<br><br>
+        Stage deadlines are calculated as <strong>cumulative P95 from Monte Carlo</strong> — the date each stage must finish to give 95% confidence in meeting that step's deadline. Confidence levels you set per process feed directly into these dates.
+      </p>
+
+      <h3 style="margin-top:14px">Honest limitations</h3>
+      <p class="desc">
+        • Steps are strictly sequential between each other; only stages within a step are parallel.<br>
+        • Costs are deterministic (only times have distributions).<br>
+        • Resource conflicts across multiple in-flight orders are not modeled.<br>
+        • Confidence % is subjective — replace with empirical std once you have ≥30 historical observations per process.<br>
+        • Per-step P95s don't sum to total project P95 (because the slowest step varies trial to trial). The total project P95 shown in Order Brief is computed independently and may be smaller than the sum of step P95s.<br>
+        • Threshold bumps are applied uniformly to optimistic/most-likely/pessimistic.
+      </p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════
+   STATE & STORAGE
+═══════════════════════════════════════════════════════ */
+const STORE_KEY = 'opsplanner_v4';
+const HIST_KEY  = 'opsplanner_history_v4';
+
+let DATA = {
+  stages: [],         // ['Fabric','Cut','Sew','Print','Pack']
+  workflows: [],      // {id, name, steps:[ [stageNames...], ...]}    — each step = array of stages running in parallel
+  processes: []       // {id,name,stage,timeMin,timeML,timeMax,cost,costType,confidence,splittable,note}
+};
+
+let editingProcId = null;
+let editingWfId = null;
+let activeFilter = 'all';
+let lastResults = null;
+let activeScenIdx = 0;
+
+// Per-order state during planning:
+let stageCandSelections = {};  // {stageName: Set<procId>}
+let stageEnabled = {};          // {stageName: bool} — per-order tick to skip a stage
+let splitShares = {};           // {stageName: {procId: percent}} — for split scenarios
+
+function loadStore(){ try{ const r=JSON.parse(localStorage.getItem(STORE_KEY)); if(r){ DATA={...DATA,...r}; DATA.processes = (DATA.processes||[]).map(p=>({...p, thresholds: p.thresholds||[]})); } }catch(e){} }
+function saveStore(){
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(DATA));
+  } catch(err) {
+    alert('Could not save library: ' + (err.message || err) + '\n\nUse "Export JSON" to back up before continuing.');
+  }
+}
+function loadHist(){ try{ return JSON.parse(localStorage.getItem(HIST_KEY)||'[]'); }catch(e){ return []; } }
+function saveHist(h){
+  try {
+    localStorage.setItem(HIST_KEY, JSON.stringify(h));
+    return { ok: true };
+  } catch(err) {
+    return { ok: false, error: err.message || String(err) };
+  }
+}
+
+// Sanitize a process object for storage — strip anything not needed for replay
+function cleanProcessForStorage(p){
+  if(!p) return p;
+  return {
+    id: p.id,
+    name: p.name,
+    stage: p.stage,
+    timeMin: p.timeMin,
+    timeML: p.timeML,
+    timeMax: p.timeMax,
+    cost: p.cost,
+    costType: p.costType,
+    confidence: p.confidence,
+    splittable: p.splittable,
+    note: p.note || '',
+    thresholds: (p.thresholds || []).map(t => ({minQty: t.minQty, addDays: t.addDays}))
+  };
+}
+
+// Build a minimal saved-order object: only summary stats, no MC arrays, no extra noise
+function buildSavedOrder(run){
+  return {
+    id: Date.now(),
+    orderName: run.orderName,
+    qty: run.qty,
+    start: run.start,
+    deadline: run.deadline,
+    deadlineDays: run.deadlineDays,
+    trials: run.trials,
+    balanceWeight: run.balanceWeight,
+    workflowId: run.workflowId,
+    workflowName: run.workflowName,
+    workflowSteps: (run.workflowSteps || []).map(s => [...s]),
+    enabledStages: {...(run.enabledStages || {})},
+    splitSharesSnapshot: JSON.parse(JSON.stringify(run.splitSharesSnapshot || {})),
+    totalRoutes: run.totalRoutes,
+    timestamp: run.timestamp || new Date().toISOString(),
+    scenarios: (run.scenarios || []).map(s => ({
+      tags: (s.tags || []).map(t => ({tag: t.tag, label: t.label})),
+      cost: Number(s.cost) || 0,
+      pOnTime: s.pOnTime,
+      pertExp: Number(s.pertExp) || 0,
+      mc: {
+        mean: Number(s.mc?.mean) || 0,
+        median: Number(s.mc?.median) || 0,
+        p5: Number(s.mc?.p5) || 0,
+        p95: Number(s.mc?.p95) || 0,
+        std: Number(s.mc?.std) || 0,
+        // Per-step stats — small (one object per step), needed for Excel deadlines
+        stepStats: (s.mc?.stepStats || []).map(st => ({
+          mean: Number(st.mean) || 0,
+          p50: Number(st.p50) || 0,
+          p95: Number(st.p95) || 0
+        }))
+        // NOTE: deliberately drop mc.results (the raw 5,000-trial array)
+      },
+      route: (s.route || []).map(step => {
+        // step is {stageName: assignment}
+        const out = {};
+        Object.entries(step).forEach(([sn, asgn]) => {
+          out[sn] = {
+            processes: (asgn.processes || []).map(cleanProcessForStorage),
+            shares: (asgn.shares || []).map(Number)
+          };
+        });
+        return out;
+      })
+    }))
+  };
+}
+
+function getStorageUsageInfo(){
+  // Estimate localStorage usage so we can warn before quota
+  let total = 0;
+  try {
+    for(let i = 0; i < localStorage.length; i++){
+      const k = localStorage.key(i);
+      const v = localStorage.getItem(k) || '';
+      total += k.length + v.length;
+    }
+  } catch(e){}
+  return { bytes: total, kb: Math.round(total / 1024) };
+}
+
+function uid(){ return Math.random().toString(36).slice(2,9); }
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===name));
+  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.toggle('active', p.id==='tab-'+name));
+  if(name==='processes') renderProcessLibrary();
+  if(name==='plan'){ renderWorkflowPicker(); onWorkflowPicked(); }
+  if(name==='workflows'){ renderWorkflowList(); renderStagesLibrary(); }
+  if(name==='history') renderHistory();
+}
+
+/* ═══════════════════════════════════════════════════════
+   STAGES LIBRARY
+═══════════════════════════════════════════════════════ */
+function addStage(){
+  const inp = document.getElementById('newStageInput');
+  const v = inp.value.trim();
+  if(!v) return;
+  if(DATA.stages.includes(v)){ alert('Stage already exists'); return; }
+  DATA.stages.push(v);
+  saveStore(); inp.value=''; renderStagesLibrary();
+}
+function removeStage(name){
+  if(DATA.processes.some(p=>p.stage===name)){
+    if(!confirm(`Stage "${name}" is used by some processes. Remove anyway?`)) return;
+    DATA.processes.forEach(p=>{ if(p.stage===name) p.stage=''; });
+  }
+  if(DATA.workflows.some(w=>w.steps.some(step=>step.includes(name)))){
+    if(!confirm(`Stage "${name}" is used by some workflow templates. Remove from those?`)) {
+      DATA.stages = DATA.stages.filter(s=>s!==name);
+      saveStore(); renderStagesLibrary(); return;
+    }
+    DATA.workflows.forEach(w=>{ w.steps = w.steps.map(step=> step.filter(s=>s!==name)).filter(step=>step.length); });
+  }
+  DATA.stages = DATA.stages.filter(s=>s!==name);
+  saveStore(); renderStagesLibrary(); renderWorkflowList();
+}
+function renderStagesLibrary(){
+  const el = document.getElementById('stagesLibrary');
+  if(!DATA.stages.length){ el.innerHTML = '<div class="empty">No stages yet. Add one below.</div>'; return; }
+  el.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
+    DATA.stages.map(s=>`
+      <span class="step-stage-chip" style="cursor:default">
+        ${escapeHtml(s)}
+        <span class="chip-x" onclick="removeStage('${escapeHtml(s).replace(/'/g,"\\'")}')" title="Delete stage">×</span>
+      </span>
+    `).join('') + '</div>';
+}
+
+/* ═══════════════════════════════════════════════════════
+   WORKFLOW EDITOR — STEPS WITH PARALLEL STAGES
+═══════════════════════════════════════════════════════ */
+let editingWfSteps = [];  // [[stage,stage], [stage], ...]
+
+function newWorkflow(){
+  editingWfId = uid();
+  editingWfSteps = [];
+  renderWorkflowEditor({id:editingWfId, name:'', steps:[]}, true);
+}
+function editWorkflow(id){
+  editingWfId = id;
+  const wf = DATA.workflows.find(w=>w.id===id);
+  if(wf){
+    editingWfSteps = wf.steps.map(step=>[...step]);
+    renderWorkflowEditor({...wf}, false);
+  }
+  renderWorkflowList();
+}
+
+function renderWorkflowEditor(wf, isNew){
+  const el = document.getElementById('workflowEditor');
+  el.innerHTML = `
+    <div class="res-form" style="margin-bottom:14px">
+      <div class="field">
+        <label>Workflow name *</label>
+        <input type="text" id="wf_name" value="${escapeHtml(wf.name)}" placeholder="e.g. Standard hoodie production">
+      </div>
+      <div class="field">
+        <label>Steps (each step = sequential; multiple stages in one step = parallel)</label>
+        <div class="steps-builder" id="stepsBuilder"></div>
+        <button class="btn small" style="margin-top:8px" onclick="addStep()">+ Add step</button>
+      </div>
+      <div class="form-actions">
+        <button class="btn primary" onclick="saveWorkflow()">${isNew?'Create':'Update'}</button>
+        <button class="btn" onclick="cancelWorkflow()">Cancel</button>
+        ${!isNew?`<button class="btn danger" onclick="deleteWorkflow('${wf.id}')">Delete</button>`:''}
+      </div>
+    </div>
+  `;
+  renderStepsBuilder();
+}
+
+function renderStepsBuilder(){
+  const el = document.getElementById('stepsBuilder');
+  if(!el) return;
+  if(!editingWfSteps.length){
+    el.innerHTML = '<div class="muted" style="font-size:12px;font-style:italic;text-align:center;padding:16px">No steps yet. Click "+ Add step" below.</div>';
+    return;
+  }
+  el.innerHTML = editingWfSteps.map((step, idx)=>{
+    const isParallel = step.length > 1;
+    return `
+      <div class="step-row">
+        <span class="step-num">Step ${idx+1}${isParallel?' · '+step.length+' stages parallel':''}</span>
+        <div class="step-actions">
+          ${idx>0 ? `<button class="li-btn" onclick="moveStep(${idx},-1)" title="Move up">↑</button>` : ''}
+          ${idx<editingWfSteps.length-1 ? `<button class="li-btn" onclick="moveStep(${idx},1)" title="Move down">↓</button>` : ''}
+          <button class="li-btn del" onclick="removeStep(${idx})" title="Delete step">×</button>
+        </div>
+        <div class="step-stages">
+          ${step.map((s,si)=>`
+            <span class="step-stage-chip">
+              ${escapeHtml(s)}
+              <span class="chip-x" onclick="removeStageFromStep(${idx},${si})" title="Remove from this step">×</span>
+            </span>
+          `).join('')}
+          ${isParallel ? '<span class="parallel-tag">PARALLEL</span>' : ''}
+          <span class="step-add-stage">
+            <select id="addStageSel_${idx}">
+              <option value="">+ Add stage to step…</option>
+              ${DATA.stages.filter(s=>!step.includes(s)).map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('')}
+            </select>
+            <button class="btn tiny" onclick="addStageToStep(${idx})">Add</button>
+          </span>
+        </div>
+      </div>
+      ${idx<editingWfSteps.length-1 ? '<div class="step-divider">↓</div>' : ''}
+    `;
+  }).join('');
+}
+
+function addStep(){
+  editingWfSteps.push([]);
+  renderStepsBuilder();
+}
+function removeStep(idx){
+  editingWfSteps.splice(idx,1);
+  renderStepsBuilder();
+}
+function moveStep(idx, dir){
+  const newIdx = idx + dir;
+  if(newIdx<0 || newIdx>=editingWfSteps.length) return;
+  const tmp = editingWfSteps[idx];
+  editingWfSteps[idx] = editingWfSteps[newIdx];
+  editingWfSteps[newIdx] = tmp;
+  renderStepsBuilder();
+}
+function addStageToStep(stepIdx){
+  const sel = document.getElementById(`addStageSel_${stepIdx}`);
+  const v = sel.value;
+  if(!v) return;
+  if(!editingWfSteps[stepIdx].includes(v)) editingWfSteps[stepIdx].push(v);
+  renderStepsBuilder();
+}
+function removeStageFromStep(stepIdx, stageIdx){
+  editingWfSteps[stepIdx].splice(stageIdx,1);
+  if(!editingWfSteps[stepIdx].length){
+    if(confirm('This step is now empty. Delete the empty step?')){
+      editingWfSteps.splice(stepIdx,1);
+    }
+  }
+  renderStepsBuilder();
+}
+
+function saveWorkflow(){
+  const name = document.getElementById('wf_name').value.trim();
+  if(!name){ alert('Workflow name required'); return; }
+  const validSteps = editingWfSteps.filter(s=>s.length>0);
+  if(!validSteps.length){ alert('Add at least one step with at least one stage'); return; }
+  const idx = DATA.workflows.findIndex(w=>w.id===editingWfId);
+  const wf = {id:editingWfId, name, steps: validSteps.map(s=>[...s])};
+  if(idx>=0) DATA.workflows[idx]=wf; else DATA.workflows.push(wf);
+  saveStore();
+  cancelWorkflow();
+}
+function cancelWorkflow(){
+  editingWfId = null;
+  editingWfSteps = [];
+  document.getElementById('workflowEditor').innerHTML = '';
+  renderWorkflowList();
+}
+function deleteWorkflow(id){
+  if(!confirm('Delete this workflow template?')) return;
+  DATA.workflows = DATA.workflows.filter(w=>w.id!==id);
+  saveStore();
+  cancelWorkflow();
+}
+
+function renderWorkflowList(){
+  const el = document.getElementById('workflowList');
+  if(!DATA.workflows.length){
+    el.innerHTML = '<div class="empty">No workflow templates yet. Click "+ New template".</div>';
+    return;
+  }
+  el.innerHTML = DATA.workflows.map(wf=>{
+    const chainHtml = wf.steps.map((step,i)=>{
+      const isPar = step.length>1;
+      const inner = step.map(s=>escapeHtml(s)).join(' ‖ ');
+      return `<span class="mini-step ${isPar?'parallel':''}">${inner}${isPar?' <span class="parallel-tag" style="font-size:9px;margin-left:4px">‖</span>':''}</span>${i<wf.steps.length-1?' → ':''}`;
+    }).join('');
+    return `
+      <div class="wf-item ${editingWfId===wf.id?'editing':''}" onclick="editWorkflow('${wf.id}')">
+        <div class="wf-name">${escapeHtml(wf.name)}</div>
+        <div class="wf-chain"><strong>Steps:</strong> ${chainHtml}</div>
+        <div class="wf-actions">
+          <button class="li-btn" onclick="event.stopPropagation();editWorkflow('${wf.id}')">✎</button>
+          <button class="li-btn del" onclick="event.stopPropagation();deleteWorkflow('${wf.id}')">×</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+/* ═══════════════════════════════════════════════════════
+   PROCESS LIBRARY
+═══════════════════════════════════════════════════════ */
+function newProcess(){
+  editingProcId = null;
+  renderProcessEditor({id:uid(),name:'',stage:DATA.stages[0]||'',timeMin:1,timeML:3,timeMax:7,cost:0,costType:'piece',confidence:70,splittable:false,note:'',thresholds:[]}, true);
+}
+function editProcess(id){
+  editingProcId = id;
+  const p = DATA.processes.find(x=>x.id===id);
+  if(p) renderProcessEditor({...p}, false);
+  renderProcessLibrary();
+}
+function deleteProcess(id){
+  if(!confirm('Delete this process?')) return;
+  DATA.processes = DATA.processes.filter(p=>p.id!==id);
+  saveStore(); cancelProcess();
+}
+function cancelProcess(){
+  editingProcId = null;
+  document.getElementById('processEditor').innerHTML = '';
+  renderProcessLibrary();
+}
+function renderProcessEditor(p, isNew){
+  const el = document.getElementById('processEditor');
+  if(!DATA.stages.length){
+    el.innerHTML = '<div class="banner warn">⚠ Add at least one stage before creating a process.</div>';
+    return;
+  }
+  // Initialize thresholds working state from process
+  editingThresholds = (p.thresholds||[]).map(t=>({...t}));
+  el.innerHTML = `
+    <div class="res-form" style="margin-bottom:14px">
+      <div class="grid-2">
+        <div class="field">
+          <label>Process name *</label>
+          <input type="text" id="p_name" value="${escapeHtml(p.name)}" placeholder="e.g. Factory Cairo East">
+        </div>
+        <div class="field">
+          <label>Stage assignment *</label>
+          <select id="p_stage">
+            ${DATA.stages.map(s=>`<option value="${escapeHtml(s)}" ${p.stage===s?'selected':''}>${escapeHtml(s)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="grid-3">
+        <div class="field"><label>Optimistic (days)</label><input type="number" id="p_min" value="${p.timeMin}" min="0" step="0.5"></div>
+        <div class="field"><label>Most likely (days)</label><input type="number" id="p_ml" value="${p.timeML}" min="0" step="0.5"></div>
+        <div class="field"><label>Pessimistic (days)</label><input type="number" id="p_max" value="${p.timeMax}" min="0" step="0.5"></div>
+      </div>
+      <div class="grid-3">
+        <div class="field"><label>Cost</label><input type="number" id="p_cost" value="${p.cost}" min="0" step="0.5"></div>
+        <div class="field">
+          <label>Cost type</label>
+          <select id="p_costType">
+            <option value="piece" ${(p.costType||'piece')==='piece'?'selected':''}>EGP per piece</option>
+            <option value="lump" ${p.costType==='lump'?'selected':''}>EGP lump-sum</option>
+          </select>
+        </div>
+        <div class="field"><label>Confidence (%)</label><input type="number" id="p_conf" value="${p.confidence}" min="0" max="100" step="5"></div>
+      </div>
+      <div class="field hint" style="margin-top:-4px">Base time estimate applies to small/typical orders. Add quantity thresholds below to lengthen time for larger orders.</div>
+      <div class="thresh-section">
+        <div class="thresh-section-title">
+          <span>Quantity thresholds (extra days at higher quantities)</span>
+          <button onclick="addThreshold()">+ Add threshold</button>
+        </div>
+        <div class="hint" style="font-size:10.5px;color:#64748b;margin-bottom:8px;line-height:1.5">
+          When the quantity processed at this resource (split branch qty if split, otherwise full order qty) is at or above the threshold, add the extra days to the base time. The highest matching threshold wins (no stacking). Leave empty if quantity doesn't affect this resource's time.
+        </div>
+        <div id="thresholdsEditor"></div>
+      </div>
+      <div style="margin-top:10px">
+        <label class="checkbox-row">
+          <input type="checkbox" id="p_split" ${p.splittable?'checked':''}>
+          Splittable — can run in parallel with other splittable processes at same stage
+        </label>
+      </div>
+      <div class="field"><label>Note</label><input type="text" id="p_note" value="${escapeHtml(p.note||'')}" placeholder="capabilities, contact, terms…"></div>
+      <div class="form-actions">
+        <button class="btn primary" onclick="saveProcess('${p.id}')">${isNew?'Create':'Update'}</button>
+        <button class="btn" onclick="cancelProcess()">Cancel</button>
+        ${!isNew?`<button class="btn danger" onclick="deleteProcess('${p.id}')">Delete</button>`:''}
+      </div>
+    </div>
+  `;
+  renderThresholdsEditor();
+  setTimeout(()=>document.getElementById('p_name')?.focus(),50);
+}
+
+let editingThresholds = [];
+function addThreshold(){
+  // Capture current input values before re-render
+  captureThresholdInputs();
+  // Suggest sensible defaults
+  let suggestedQty = 1000;
+  if(editingThresholds.length){
+    const lastQty = Math.max(...editingThresholds.map(t=>t.minQty||0));
+    suggestedQty = lastQty + 1000;
+  }
+  editingThresholds.push({minQty: suggestedQty, addDays: 2});
+  renderThresholdsEditor();
+}
+function removeThreshold(idx){
+  captureThresholdInputs();
+  editingThresholds.splice(idx,1);
+  renderThresholdsEditor();
+}
+function captureThresholdInputs(){
+  // Read current input values back into editingThresholds (so we don't lose user edits when re-rendering)
+  editingThresholds.forEach((t,i)=>{
+    const qEl = document.getElementById(`th_qty_${i}`);
+    const dEl = document.getElementById(`th_days_${i}`);
+    if(qEl) t.minQty = parseFloat(qEl.value) || 0;
+    if(dEl) t.addDays = parseFloat(dEl.value) || 0;
+  });
+}
+function renderThresholdsEditor(){
+  const el = document.getElementById('thresholdsEditor');
+  if(!el) return;
+  if(!editingThresholds.length){
+    el.innerHTML = '<div class="thresh-empty">No thresholds. Time stays at base regardless of qty.</div>';
+    return;
+  }
+  // Sort by minQty for clearer display (don't mutate, sort copy for display)
+  const indexed = editingThresholds.map((t,i)=>({...t, _idx:i}));
+  indexed.sort((a,b)=> (a.minQty||0) - (b.minQty||0));
+  el.innerHTML = indexed.map(t=>`
+    <div class="thresh-row">
+      <label>If qty ≥</label>
+      <input type="number" id="th_qty_${t._idx}" value="${t.minQty}" min="0" step="100">
+      <label>pcs, add</label>
+      <input type="number" id="th_days_${t._idx}" value="${t.addDays}" min="0" step="0.5">
+      <label>days to base time</label>
+      <button class="thresh-del" onclick="removeThreshold(${t._idx})" title="Remove">×</button>
+    </div>
+  `).join('');
+}
+function saveProcess(id){
+  const name = document.getElementById('p_name').value.trim();
+  if(!name){ alert('Name required'); return; }
+  const stage = document.getElementById('p_stage').value;
+  const tmin = parseFloat(document.getElementById('p_min').value)||0;
+  const tml  = parseFloat(document.getElementById('p_ml').value)||0;
+  const tmax = parseFloat(document.getElementById('p_max').value)||0;
+  if(!(tmin <= tml && tml <= tmax)){ alert('Time estimates: optimistic ≤ most likely ≤ pessimistic'); return; }
+  // Capture latest threshold input values
+  captureThresholdInputs();
+  // Validate thresholds
+  const cleanThresholds = editingThresholds
+    .filter(t => (t.minQty>0) && (t.addDays>=0))
+    .map(t => ({minQty: t.minQty, addDays: t.addDays}));
+  const proc = {
+    id, name, stage,
+    timeMin: tmin, timeML: tml, timeMax: tmax,
+    cost: parseFloat(document.getElementById('p_cost').value)||0,
+    costType: document.getElementById('p_costType').value,
+    confidence: parseFloat(document.getElementById('p_conf').value)||70,
+    splittable: document.getElementById('p_split').checked,
+    note: document.getElementById('p_note').value.trim(),
+    thresholds: cleanThresholds
+  };
+  const idx = DATA.processes.findIndex(p=>p.id===id);
+  if(idx>=0) DATA.processes[idx] = proc; else DATA.processes.push(proc);
+  saveStore(); cancelProcess();
+}
+function renderProcessLibrary(){
+  const filtersEl = document.getElementById('procFilters');
+  const counts = {};
+  DATA.processes.forEach(p=> counts[p.stage] = (counts[p.stage]||0)+1);
+  let filterHtml = `<button class="filter-chip ${activeFilter==='all'?'active':''}" onclick="setFilter('all')">All (${DATA.processes.length})</button>`;
+  filterHtml += DATA.stages.map(s=>{
+    const c = counts[s]||0;
+    return `<button class="filter-chip ${activeFilter===s?'active':''}" onclick="setFilter('${escapeHtml(s).replace(/'/g,"\\'")}')">${escapeHtml(s)} (${c})</button>`;
+  }).join('');
+  filtersEl.innerHTML = filterHtml;
+  document.getElementById('procCount').textContent = `${DATA.processes.length} total`;
+
+  const filtered = activeFilter==='all' ? DATA.processes : DATA.processes.filter(p=>p.stage===activeFilter);
+  const grid = document.getElementById('processGrid');
+  if(!filtered.length){
+    grid.innerHTML = `<div class="empty" style="grid-column:1/-1">No processes${activeFilter==='all'?' yet':' for this stage'}.</div>`;
+    return;
+  }
+  grid.innerHTML = filtered.map(p=>{
+    const ths = (p.thresholds||[]).slice().sort((a,b)=>a.minQty-b.minQty);
+    const thSummary = ths.length
+      ? `<div class="pc-thresh">⚠ ${ths.map(t=>`≥${t.minQty.toLocaleString()}: +${t.addDays}d`).join(' &nbsp;·&nbsp; ')}</div>`
+      : '';
+    return `
+    <div class="proc-card ${editingProcId===p.id?'editing':''}" onclick="editProcess('${p.id}')">
+      <div class="pc-stage">${escapeHtml(p.stage||'(unassigned)')}</div>
+      <div class="pc-name">${escapeHtml(p.name)}</div>
+      <div class="pc-meta">
+        ${p.timeMin}–${p.timeML}–${p.timeMax}d &nbsp;·&nbsp;
+        ${(p.costType||'piece')==='piece' ? `${p.cost} EGP/pc` : `${p.cost.toLocaleString()} EGP lump`} &nbsp;·&nbsp;
+        Conf ${p.confidence}%
+        ${p.splittable?' &nbsp;·&nbsp; <span style="color:#f87171">Split-OK</span>':''}
+      </div>
+      ${thSummary}
+      <div class="pc-actions">
+        <button class="li-btn" onclick="event.stopPropagation();editProcess('${p.id}')">✎</button>
+        <button class="li-btn del" onclick="event.stopPropagation();deleteProcess('${p.id}')">×</button>
+      </div>
+    </div>
+  `;}).join('');
+}
+function setFilter(s){ activeFilter = s; renderProcessLibrary(); }
+
+/* ═══════════════════════════════════════════════════════
+   ORDER PLANNER (with per-stage tick + custom split shares)
+═══════════════════════════════════════════════════════ */
+function renderWorkflowPicker(){
+  const sel = document.getElementById('orderWorkflow');
+  if(!DATA.workflows.length){ sel.innerHTML = '<option value="">— No workflows defined —</option>'; return; }
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— Pick a workflow —</option>' +
+    DATA.workflows.map(w=>`<option value="${w.id}">${escapeHtml(w.name)}</option>`).join('');
+  if(cur && DATA.workflows.some(w=>w.id===cur)) sel.value = cur;
+}
+
+function getActiveWorkflow(){
+  const wfId = document.getElementById('orderWorkflow').value;
+  return DATA.workflows.find(w=>w.id===wfId) || null;
+}
+
+function getEnabledStagesInOrder(){
+  // Returns flat list of stage names in workflow order, only those enabled
+  const wf = getActiveWorkflow();
+  if(!wf) return [];
+  const all = [];
+  wf.steps.forEach(step=> step.forEach(s=> all.push(s)));
+  return all.filter(s=> stageEnabled[s] !== false);
+}
+
+function getEnabledSteps(){
+  const wf = getActiveWorkflow();
+  if(!wf) return [];
+  return wf.steps.map(step=> step.filter(s=> stageEnabled[s] !== false)).filter(step=>step.length>0);
+}
+
+function onWorkflowPicked(){
+  const wf = getActiveWorkflow();
+  const previewEl = document.getElementById('workflowPreview');
+  const candsSection = document.getElementById('candidatesSection');
+  const candsContainer = document.getElementById('stageCandsContainer');
+
+  if(!wf){
+    previewEl.style.display = 'none';
+    candsSection.style.display = 'none';
+    return;
+  }
+
+  // Initialize stage state for any new stages in this workflow
+  wf.steps.forEach(step=> step.forEach(s=>{
+    if(stageEnabled[s] === undefined) stageEnabled[s] = true;
+    if(!stageCandSelections[s]) stageCandSelections[s] = new Set();
+    if(!splitShares[s]) splitShares[s] = {};
+  }));
+
+  // Workflow preview with tick boxes per stage
+  previewEl.style.display = 'block';
+  let previewHtml = '<div style="font-size:11px;color:#475569;margin-bottom:10px">Tick stages to include in this order. Untick to skip.</div>';
+  wf.steps.forEach((step,sIdx)=>{
+    const isPar = step.length > 1;
+    previewHtml += `
+      <div class="preview-step ${isPar?'parallel':''}">
+        <span class="preview-step-num">Step ${sIdx+1}${isPar?' · parallel':''}</span>
+        ${step.map(s=>{
+          const en = stageEnabled[s] !== false;
+          return `
+            <span class="preview-stage-chip ${en?'':'unticked'}" onclick="toggleStageEnabled('${escapeHtml(s).replace(/'/g,"\\'")}')">
+              <input type="checkbox" ${en?'checked':''} onclick="event.stopPropagation();toggleStageEnabled('${escapeHtml(s).replace(/'/g,"\\'")}')">
+              ${escapeHtml(s)}
+            </span>
+          `;
+        }).join('')}
+      </div>
+    `;
+  });
+  previewEl.innerHTML = previewHtml;
+
+  // Candidates per stage (only enabled)
+  candsSection.style.display = 'block';
+  const qty = parseInt(document.getElementById('orderQty').value)||0;
+  let candsHtml = '';
+  let stageNum = 0;
+  wf.steps.forEach((step,sIdx)=>{
+    step.forEach(stage=>{
+      stageNum++;
+      const enabled = stageEnabled[stage] !== false;
+      const procs = DATA.processes.filter(p=>p.stage===stage);
+      const selected = [...stageCandSelections[stage]].map(id=> procs.find(p=>p.id===id)).filter(Boolean);
+      const splittable = selected.filter(p=>p.splittable);
+
+      candsHtml += `
+        <div class="stage-card ${enabled?'':'disabled'}">
+          <div class="stage-card-header">
+            <h5><span class="stage-num">${stageNum}</span>${escapeHtml(stage)}${!enabled?' <span class="muted" style="font-weight:normal;font-size:11px">(skipped)</span>':''}</h5>
+            <span class="stage-meta">
+              ${procs.length} process${procs.length===1?'':'es'} available
+              ${splittable.length>=2?` · <span style="color:#f87171">${splittable.length} splittable picked → split scenarios will generate</span>`:''}
+            </span>
+          </div>
+          <div class="stage-cands-row">
+            ${procs.length ? procs.map(p=>`
+              <div class="cand-pill ${stageCandSelections[stage].has(p.id)?'selected':''}" onclick="toggleStageCand('${escapeHtml(stage).replace(/'/g,"\\'")}','${p.id}')">
+                <input type="checkbox" ${stageCandSelections[stage].has(p.id)?'checked':''} onclick="event.stopPropagation();toggleStageCand('${escapeHtml(stage).replace(/'/g,"\\'")}','${p.id}')">
+                <span>${escapeHtml(p.name)}</span>
+                <span class="cand-meta">${p.timeML}d · ${(p.costType||'piece')==='piece'?p.cost+'/pc':p.cost.toLocaleString()+' lump'}${p.splittable?' · S':''}</span>
+              </div>
+            `).join('') : '<div class="no-cands">No processes assigned to this stage. Add some in the Process library tab.</div>'}
+          </div>
+          ${splittable.length >= 2 ? renderSplitPanel(stage, splittable, qty) : ''}
+        </div>
+      `;
+    });
+  });
+  candsContainer.innerHTML = candsHtml;
+}
+
+function renderSplitPanel(stage, splittable, qty){
+  // Initialize shares to equal if not set or if process list changed
+  const ids = splittable.map(p=>p.id).sort().join(',');
+  const existingIds = Object.keys(splitShares[stage]||{}).sort().join(',');
+  if(ids !== existingIds){
+    splitShares[stage] = {};
+    const eq = Math.round(100/splittable.length);
+    splittable.forEach((p,i)=> splitShares[stage][p.id] = i===splittable.length-1 ? 100 - eq*(splittable.length-1) : eq);
+  }
+  const total = Object.values(splitShares[stage]).reduce((a,b)=>a+b,0);
+  const totalBad = Math.abs(total-100) > 0.5;
+  const stageEsc = escapeHtml(stage).replace(/'/g,"\\'");
+  return `
+    <div class="split-panel">
+      <div class="split-panel-title">
+        <span>Quantity shares for parallel split at <strong>${escapeHtml(stage)}</strong></span>
+        <button onclick="resetSplitShares('${stageEsc}')">Reset to equal</button>
+      </div>
+      ${splittable.map(p=>{
+        const pct = splitShares[stage][p.id] ?? 0;
+        const pcs = Math.round(qty * pct / 100);
+        return `
+          <div class="split-row">
+            <span class="split-name">${escapeHtml(p.name)}</span>
+            <input type="number" min="0" max="100" step="1" value="${pct}" oninput="updateSplitShare('${stageEsc}','${p.id}',this.value)">
+            <span style="color:#64748b;font-size:11px">%</span>
+            <span class="split-pcs">${pcs.toLocaleString()} pcs</span>
+          </div>
+        `;
+      }).join('')}
+      <div class="split-total ${totalBad?'bad':''}">Total: ${total.toFixed(0)}% ${totalBad?'⚠ should be 100%':'✓'}</div>
+    </div>
+  `;
+}
+
+function updateSplitShare(stage, procId, val){
+  const v = parseFloat(val)||0;
+  if(!splitShares[stage]) splitShares[stage] = {};
+  splitShares[stage][procId] = v;
+  // Re-render JUST the split panel (avoid losing focus on the input)
+  const wf = getActiveWorkflow(); if(!wf) return;
+  // Update the pcs display next to inputs without full re-render
+  const qty = parseInt(document.getElementById('orderQty').value)||0;
+  const splittable = [...stageCandSelections[stage]].map(id=>DATA.processes.find(p=>p.id===id)).filter(Boolean).filter(p=>p.splittable);
+  const total = Object.values(splitShares[stage]).reduce((a,b)=>a+b,0);
+  // Live update display via direct DOM walk would be fragile; just re-render
+  onWorkflowPicked();
+  // Restore focus to the input that triggered the change
+  setTimeout(()=>{
+    const inputs = document.querySelectorAll('.split-row input[type=number]');
+    for(const inp of inputs){
+      if(inp.getAttribute('oninput').includes(procId) && inp.getAttribute('oninput').includes(stage.replace(/'/g,"\\'"))){
+        inp.focus();
+        // place cursor at end
+        const v = inp.value;
+        inp.value = '';
+        inp.value = v;
+        break;
+      }
+    }
+  }, 10);
+}
+
+function resetSplitShares(stage){
+  const splittable = [...stageCandSelections[stage]].map(id=>DATA.processes.find(p=>p.id===id)).filter(Boolean).filter(p=>p.splittable);
+  splitShares[stage] = {};
+  const eq = Math.round(100/splittable.length);
+  splittable.forEach((p,i)=> splitShares[stage][p.id] = i===splittable.length-1 ? 100-eq*(splittable.length-1) : eq);
+  onWorkflowPicked();
+}
+
+function toggleStageEnabled(stage){
+  stageEnabled[stage] = !(stageEnabled[stage] !== false);
+  onWorkflowPicked();
+}
+function toggleStageCand(stage, procId){
+  if(!stageCandSelections[stage]) stageCandSelections[stage] = new Set();
+  if(stageCandSelections[stage].has(procId)) stageCandSelections[stage].delete(procId);
+  else stageCandSelections[stage].add(procId);
+  onWorkflowPicked();
+}
+
+/* ═══════════════════════════════════════════════════════
+   PERT / MONTE CARLO PRIMITIVES
+═══════════════════════════════════════════════════════ */
+/* Returns extra days from the highest threshold whose minQty <= qty. 0 if none apply. */
+function getQtyBump(proc, branchQty){
+  const ths = proc.thresholds || [];
+  if(!ths.length || !branchQty) return 0;
+  let best = null;
+  for(const t of ths){
+    if(branchQty >= (t.minQty||0)){
+      if(!best || (t.minQty||0) > (best.minQty||0)) best = t;
+    }
+  }
+  return best ? (best.addDays||0) : 0;
+}
+
+function effectiveTriangle(p, branchQty){
+  const k = (100 - (p.confidence||70)) / 100;
+  const ml = p.timeML;
+  // Apply threshold bump uniformly to all three estimates
+  const bump = getQtyBump(p, branchQty);
+  return { min: (ml - (ml - p.timeMin) * k) + bump, ml: ml + bump, max: (ml + (p.timeMax - ml) * k) + bump };
+}
+function sampleTri(min, ml, max){
+  const u = Math.random();
+  const range = max - min;
+  if(range === 0) return min;
+  const F = (ml - min) / range;
+  if(u < F) return min + Math.sqrt(u * range * (ml - min));
+  return max - Math.sqrt((1 - u) * range * (max - ml));
+}
+function sampleProcess(p, branchQty){
+  const t = effectiveTriangle(p, branchQty);
+  return Math.max(0, sampleTri(t.min, t.ml, t.max));
+}
+function pertMean(p, branchQty){ const t = effectiveTriangle(p, branchQty); return (t.min + 4*t.ml + t.max) / 6; }
+
+/* ═══════════════════════════════════════════════════════
+   ROUTE GENERATION
+   Route = list of steps. Each step = { stages: { stageName: stageAssignment } }
+   stageAssignment = { processes: [...], shares: [...], qty }
+═══════════════════════════════════════════════════════ */
+function buildRoutes(qty){
+  const enabledSteps = getEnabledSteps();
+  if(!enabledSteps.length) return [];
+
+  // For each step, generate options: dict of {stageName -> assignment}
+  const stepOptions = enabledSteps.map(stagesInStep=>{
+    // For each stage in this step, generate assignment options
+    const stageOpts = stagesInStep.map(stageName=>{
+      const procs = [...(stageCandSelections[stageName]||new Set())]
+        .map(id=>DATA.processes.find(p=>p.id===id))
+        .filter(Boolean);
+      if(!procs.length) return null;
+
+      const opts = [];
+      // Single-pick options
+      procs.forEach(p=>{
+        opts.push({stageName, processes:[p], shares:[1.0]});
+      });
+      // Split options (only if 2+ splittable picked)
+      const splittable = procs.filter(p=>p.splittable);
+      if(splittable.length >= 2){
+        // Pair splits using user-defined shares
+        for(let i=0;i<splittable.length;i++){
+          for(let j=i+1;j<splittable.length;j++){
+            const p1 = splittable[i], p2 = splittable[j];
+            const s1 = (splitShares[stageName]||{})[p1.id];
+            const s2 = (splitShares[stageName]||{})[p2.id];
+            // Use user shares if both defined, else 50/50
+            let sh1, sh2;
+            if(s1!=null && s2!=null && s1>0 && s2>0){
+              const sum = s1+s2;
+              sh1 = s1/sum; sh2 = s2/sum;
+            } else {
+              sh1 = 0.5; sh2 = 0.5;
+            }
+            opts.push({stageName, processes:[p1,p2], shares:[sh1,sh2]});
+          }
+        }
+        // Triple-split (only if exactly 3 splittable selected & user has set shares)
+        if(splittable.length === 3){
+          const shs = splittable.map(p=>(splitShares[stageName]||{})[p.id] || 33.33);
+          const sum = shs.reduce((a,b)=>a+b,0);
+          opts.push({stageName, processes:[...splittable], shares:shs.map(s=>s/sum)});
+        }
+      }
+      return opts;
+    });
+
+    if(stageOpts.some(o=>o===null)) return null;  // some stage has no candidates
+
+    // Cartesian over stages within this step
+    let combos = [{}];
+    stageOpts.forEach(opts=>{
+      const next = [];
+      combos.forEach(c=>{
+        opts.forEach(o=>{
+          next.push({...c, [o.stageName]: o});
+        });
+      });
+      combos = next;
+    });
+    return combos;
+  });
+
+  if(stepOptions.some(o=>o===null)) return null;  // signals validation failure
+
+  // Cartesian across steps
+  let routes = [[]];
+  stepOptions.forEach(opts=>{
+    const next = [];
+    routes.forEach(r=>{
+      opts.forEach(o=>{ next.push([...r, o]); });
+    });
+    routes = next;
+  });
+  return routes;
+}
+
+function routeCost(route, qty){
+  let total = 0;
+  route.forEach(step=>{
+    Object.values(step).forEach(asgn=>{
+      const n = asgn.processes.length;
+      asgn.processes.forEach((p,i)=>{
+        const portion = qty * (asgn.shares[i] || 1/n);
+        if((p.costType||'piece')==='piece') total += p.cost * portion;
+        else total += p.cost * (asgn.shares[i] || 1/n);
+      });
+    });
+  });
+  return total;
+}
+
+// Simulate one MC trial: total = sum over steps of MAX(stage durations within step)
+// stage duration = MAX(branch durations) for split branches.
+// Branch qty (full order × share) is passed to sampleProcess so quantity thresholds apply.
+// Returns { total, stepDurations:[d1,d2,...] }
+function simulateOnce(route, totalQty){
+  const stepDurations = new Array(route.length);
+  let total = 0;
+  route.forEach((step, idx)=>{
+    let stepDur = 0;
+    Object.values(step).forEach(asgn=>{
+      const n = asgn.processes.length;
+      let stageDur = 0;
+      asgn.processes.forEach((p,i)=>{
+        const branchQty = totalQty * (asgn.shares[i] || 1/n);
+        stageDur = Math.max(stageDur, sampleProcess(p, branchQty));
+      });
+      stepDur = Math.max(stepDur, stageDur);
+    });
+    stepDurations[idx] = stepDur;
+    total += stepDur;
+  });
+  return { total, stepDurations };
+}
+
+function pertDuration(route, totalQty){
+  let total = 0;
+  route.forEach(step=>{
+    let stepDur = 0;
+    Object.values(step).forEach(asgn=>{
+      const n = asgn.processes.length;
+      let stageDur = 0;
+      asgn.processes.forEach((p,i)=>{
+        const branchQty = totalQty * (asgn.shares[i] || 1/n);
+        stageDur = Math.max(stageDur, pertMean(p, branchQty));
+      });
+      stepDur = Math.max(stepDur, stageDur);
+    });
+    total += stepDur;
+  });
+  return total;
+}
+
+// Compute per-step PERT means (one number per step, no Monte Carlo)
+function pertStepDurations(route, totalQty){
+  return route.map(step=>{
+    let stepDur = 0;
+    Object.values(step).forEach(asgn=>{
+      const n = asgn.processes.length;
+      let stageDur = 0;
+      asgn.processes.forEach((p,i)=>{
+        const branchQty = totalQty * (asgn.shares[i] || 1/n);
+        stageDur = Math.max(stageDur, pertMean(p, branchQty));
+      });
+      stepDur = Math.max(stepDur, stageDur);
+    });
+    return stepDur;
+  });
+}
+
+function monteCarlo(route, trials, totalQty){
+  const totals = new Float64Array(trials);
+  const numSteps = route.length;
+  // stepResults[stepIdx] is an array of N samples for that step
+  const stepResults = Array.from({length: numSteps}, ()=> new Float64Array(trials));
+  for(let i=0;i<trials;i++){
+    const r = simulateOnce(route, totalQty);
+    totals[i] = r.total;
+    for(let s=0;s<numSteps;s++) stepResults[s][i] = r.stepDurations[s];
+  }
+  const sortedTotals = Array.from(totals).sort((a,b)=>a-b);
+  const mean = sortedTotals.reduce((a,b)=>a+b,0)/trials;
+  const median = sortedTotals[Math.floor(trials*0.5)];
+  const p5 = sortedTotals[Math.floor(trials*0.05)];
+  const p95 = sortedTotals[Math.floor(trials*0.95)];
+  let v=0; for(let i=0;i<trials;i++) v += (totals[i]-mean)**2;
+
+  // Per-step P95s and means
+  const stepStats = stepResults.map(arr=>{
+    const s = Array.from(arr).sort((a,b)=>a-b);
+    const m = s.reduce((a,b)=>a+b,0)/trials;
+    return {
+      mean: m,
+      p50: s[Math.floor(trials*0.5)],
+      p95: s[Math.floor(trials*0.95)]
+    };
+  });
+
+  return { mean, median, p5, p95, std: Math.sqrt(v/trials), results: sortedTotals, stepStats };
+}
+function pOnTime(mc, deadlineDays){
+  if(deadlineDays==null) return null;
+  let cnt=0; for(let i=0;i<mc.length;i++) if(mc[i] <= deadlineDays) cnt++;
+  return cnt/mc.length;
+}
+
+function routeKey(route){
+  return route.map(step=>{
+    return Object.entries(step).sort().map(([sn,a])=>{
+      return sn+':'+a.processes.map(p=>p.id).sort().join(',')+'@'+a.shares.map(s=>s.toFixed(2)).join('/');
+    }).join('+');
+  }).join('|');
+}
+function isSplitRoute(route){
+  return route.some(step=> Object.values(step).some(a=> a.processes.length > 1));
+}
+
+/* ═══════════════════════════════════════════════════════
+   PICK SCENARIOS
+═══════════════════════════════════════════════════════ */
+function pickScenarios(evaluated, balanceWeight, deadlineDays, maxN){
+  if(!evaluated.length) return [];
+  const byTime = [...evaluated].sort((a,b)=> a.mc.mean - b.mc.mean);
+  const byCost = [...evaluated].sort((a,b)=> a.cost - b.cost);
+  const wT = balanceWeight/100, wC = 1-wT;
+  const minT=byTime[0].mc.mean, maxT=byTime[byTime.length-1].mc.mean||minT+1;
+  const minC=byCost[0].cost,    maxC=byCost[byCost.length-1].cost||minC+1;
+  const scored = evaluated.map(e=>{
+    const tn = maxT===minT?0:(e.mc.mean-minT)/(maxT-minT);
+    const cn = maxC===minC?0:(e.cost-minC)/(maxC-minC);
+    return {...e, balScore: wT*tn + wC*cn};
+  });
+  const byBal = [...scored].sort((a,b)=>a.balScore - b.balScore);
+  const byConf = (deadlineDays!=null) ? [...evaluated].sort((a,b)=>b.pOnTime - a.pOnTime) : null;
+  const splits = evaluated.filter(e=>isSplitRoute(e.route));
+  const bestSplit = splits.length ? splits.sort((a,b)=>a.mc.mean - b.mc.mean)[0] : null;
+
+  const result = [];
+  const used = new Map();
+  function tag(e, t, label){
+    if(!e) return;
+    const k = routeKey(e.route);
+    if(used.has(k)){ result[used.get(k)].tags.push({tag:t,label}); return; }
+    used.set(k, result.length);
+    result.push({...e, tags:[{tag:t,label}]});
+  }
+  tag(byTime[0], 'fast', 'Fastest');
+  tag(byCost[0], 'cheap', 'Cheapest');
+  tag(byBal[0], 'bal', 'Balanced');
+  if(byConf) tag(byConf[0], 'conf', 'Highest confidence');
+  if(bestSplit && bestSplit !== byTime[0]) tag(bestSplit, 'split', 'Best split');
+
+  for(const s of byBal){
+    if(result.length >= maxN) break;
+    const k = routeKey(s.route);
+    if(!used.has(k)){
+      used.set(k, result.length);
+      result.push({...s, tags:[{tag:'alt',label:'Alternative'}]});
+    }
+  }
+  return result;
+}
+
+/* ═══════════════════════════════════════════════════════
+   RUN PLANNER
+═══════════════════════════════════════════════════════ */
+function runPlanner(){
+  const orderName = document.getElementById('orderName').value.trim() || 'Untitled order';
+  const qty = parseInt(document.getElementById('orderQty').value)||0;
+  const start = document.getElementById('orderStart').value;
+  const deadline = document.getElementById('orderDeadline').value;
+  const trials = parseInt(document.getElementById('mcTrials').value);
+  const balanceWeight = parseInt(document.getElementById('balanceWeight').value);
+  const maxScens = parseInt(document.getElementById('maxScens').value);
+  const wf = getActiveWorkflow();
+
+  if(qty<=0) return alert('Set a valid quantity.');
+  if(!wf) return alert('Pick a workflow template.');
+
+  const enabledSteps = getEnabledSteps();
+  if(!enabledSteps.length) return alert('All stages are unticked. Tick at least one.');
+
+  // Validate every enabled stage has at least one candidate
+  for(const step of enabledSteps){
+    for(const stage of step){
+      const cands = stageCandSelections[stage] || new Set();
+      if(!cands.size) return alert(`Stage "${stage}" has no candidates picked.`);
+    }
+  }
+  // Validate split shares sum to 100
+  for(const step of enabledSteps){
+    for(const stage of step){
+      const splittable = [...stageCandSelections[stage]].map(id=>DATA.processes.find(p=>p.id===id)).filter(Boolean).filter(p=>p.splittable);
+      if(splittable.length>=2){
+        const total = splittable.reduce((s,p)=> s + ((splitShares[stage]||{})[p.id] || 0), 0);
+        if(Math.abs(total-100) > 1) return alert(`Split shares at stage "${stage}" sum to ${total.toFixed(0)}%, must be 100%.`);
+      }
+    }
+  }
+
+  const deadlineDays = (start && deadline) ? Math.max(0, (new Date(deadline)-new Date(start))/86400000) : null;
+
+  const routes = buildRoutes(qty);
+  if(!routes || !routes.length) return alert('No valid routes generated.');
+  if(routes.length > 200){
+    if(!confirm(`This will generate ${routes.length} routes × ${trials.toLocaleString()} MC trials each. May take a few seconds. Continue?`)) return;
+  }
+
+  // Evaluate
+  const evaluated = routes.map(route=>{
+    const cost = routeCost(route, qty);
+    const mc = monteCarlo(route, trials, qty);
+    return { route, cost, mc, pOnTime: pOnTime(mc.results, deadlineDays), pertExp: pertDuration(route, qty) };
+  });
+  const scenarios = pickScenarios(evaluated, balanceWeight, deadlineDays, maxScens);
+
+  lastResults = {
+    orderName, qty, start, deadline, deadlineDays, trials, balanceWeight,
+    workflowId: wf.id, workflowName: wf.name,
+    workflowSteps: wf.steps.map(s=>[...s]),
+    enabledStages: {...stageEnabled},
+    splitSharesSnapshot: JSON.parse(JSON.stringify(splitShares)),
+    scenarios, totalRoutes: evaluated.length,
+    timestamp: new Date().toISOString()
+  };
+  activeScenIdx = 0;
+  renderResults();
+  switchTab('results');
+}
+
+/* ═══════════════════════════════════════════════════════
+   RENDER RESULTS
+═══════════════════════════════════════════════════════ */
+function renderResults(){
+  if(!lastResults){ return; }
+  const r = lastResults;
+  const dl = r.deadlineDays;
+  const fmtD = d => d==null ? '—' : (d<10 ? d.toFixed(1) : Math.round(d)) + 'd';
+  const fmtC = c => c.toLocaleString('en-EG',{maximumFractionDigits:0}) + ' EGP';
+  const fmtP = p => p==null ? '—' : (p*100).toFixed(0)+'%';
+
+  const tMin = Math.min(...r.scenarios.map(s=>s.mc.mean));
+  const cMin = Math.min(...r.scenarios.map(s=>s.cost));
+  const tMax = Math.max(...r.scenarios.map(s=>s.mc.mean));
+  const cMax = Math.max(...r.scenarios.map(s=>s.cost));
+  const tagClass = t => ({fast:'tag-fast',cheap:'tag-cheap',bal:'tag-bal',conf:'tag-conf',split:'tag-split',alt:'tag-alt'})[t]||'tag-alt';
+
+  let html = `
+    <div class="banner info">
+      <strong>${escapeHtml(r.orderName)}</strong> · ${r.qty.toLocaleString()} pcs · Workflow: <strong>${escapeHtml(r.workflowName)}</strong>
+      ${dl!=null?` · Deadline: ${Math.round(dl)} days`:''}
+      · ${r.scenarios.length} top scenarios from ${r.totalRoutes} routes · ${r.trials.toLocaleString()} MC trials
+    </div>
+    <div class="section-title" style="margin:14px 0 12px">
+      <div class="section-title-left"><span class="dot" style="background:#60a5fa"></span>Scenarios (click to inspect)</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn small" onclick="saveCurrentResults()">💾 Save to history</button>
+        <button class="btn small success" onclick="exportRunToExcel()">📊 Export this run to Excel</button>
+      </div>
+    </div>
+    <div class="scen-grid">
+  `;
+
+  r.scenarios.forEach((s,i)=>{
+    const isFastBest = s.mc.mean === tMin;
+    const isCheapBest = s.cost === cMin;
+    const tagBadges = s.tags.map(t=>`<span class="scen-tag ${tagClass(t.tag)}">${t.label}</span>`).join('');
+    const routeSummary = formatRouteSummary(s.route);
+    html += `
+      <div class="scen-card ${i===activeScenIdx?'active':''}" onclick="setActiveScen(${i})">
+        ${tagBadges}
+        <h4>Scenario ${i+1}</h4>
+        <div class="scen-stats">
+          <div class="scen-stat">Expected duration<strong class="${isFastBest?'green':'blue'}">${fmtD(s.mc.mean)}</strong></div>
+          <div class="scen-stat">Total cost<strong class="${isCheapBest?'green':''}">${fmtC(s.cost)}</strong></div>
+          <div class="scen-stat">P5–P95 range<strong class="muted">${fmtD(s.mc.p5)}–${fmtD(s.mc.p95)}</strong></div>
+          <div class="scen-stat">P(on-time)<strong class="${s.pOnTime>=0.85?'green':s.pOnTime>=0.6?'amber':'red'}">${fmtP(s.pOnTime)}</strong></div>
+        </div>
+        <div class="scen-route">${routeSummary}</div>
+      </div>
+    `;
+  });
+  html += `</div>`;
+
+  // Comparison table
+  html += `
+    <div class="section-title" style="margin:18px 0 12px"><div class="section-title-left"><span class="dot" style="background:#10b981"></span>Comparison table</div></div>
+    <div class="cmp-wrap">
+    <table class="cmp-table">
+      <thead><tr>
+        <th>#</th><th>Route</th><th>Expected time</th><th>P5–P95</th><th>Total cost</th><th>P(on-time)</th><th>Tags</th>
+      </tr></thead>
+      <tbody>
+  `;
+  r.scenarios.forEach((s,i)=>{
+    const tCls = s.mc.mean===tMin?'best':s.mc.mean===tMax?'worst':'';
+    const cCls = s.cost===cMin?'best':s.cost===cMax?'worst':'';
+    const pCls = s.pOnTime==null?'':s.pOnTime>=0.85?'best':s.pOnTime>=0.6?'midi':'worst';
+    const routeStr = formatRouteSummary(s.route);
+    const tagBadges = s.tags.map(t=>`<span class="scen-tag ${tagClass(t.tag)}" style="margin-right:4px">${t.label}</span>`).join('');
+    html += `
+      <tr onclick="setActiveScen(${i})" style="cursor:pointer">
+        <td class="cmp-name">#${i+1}</td>
+        <td>${routeStr}</td>
+        <td class="${tCls}">${fmtD(s.mc.mean)}</td>
+        <td>${fmtD(s.mc.p5)} – ${fmtD(s.mc.p95)}</td>
+        <td class="${cCls}">${fmtC(s.cost)}</td>
+        <td class="${pCls}">${fmtP(s.pOnTime)}</td>
+        <td>${tagBadges}</td>
+      </tr>
+    `;
+  });
+  html += `</tbody></table></div>`;
+
+  const active = r.scenarios[activeScenIdx];
+  if(active){
+    html += `
+      <div class="dag-section">
+        <div class="dag-header">
+          <h4>Project network — Scenario ${activeScenIdx+1}</h4>
+          <div class="dag-meta">Critical path in <span style="color:#f87171">red</span> · Parallel stages stack vertically</div>
+        </div>
+        <div class="dag-svg-wrap" id="dagSvgWrap"></div>
+        <div class="dag-legend">
+          <div class="dag-legend-item"><span class="dag-legend-swatch" style="background:#1e3a5f;border:0.5px solid #3b82f6"></span>Stage process</div>
+          <div class="dag-legend-item"><span class="dag-legend-swatch" style="background:#451a03;border:0.5px solid #f87171"></span>Critical path</div>
+          <div class="dag-legend-item"><span class="dag-legend-swatch" style="background:#0f1117;border:0.5px solid #475569"></span>Milestone</div>
+        </div>
+      </div>
+    `;
+  }
+
+  document.getElementById('resultsContent').innerHTML = html;
+  if(active) renderDAG(active);
+}
+
+function setActiveScen(i){ activeScenIdx = i; renderResults(); }
+
+function formatRouteSummary(route){
+  return route.map(step=>{
+    const stages = Object.entries(step);
+    if(stages.length === 1){
+      const [sn,a] = stages[0];
+      const procs = a.processes.map((p,i)=>`${escapeHtml(p.name)}${a.processes.length>1?` <span style="color:#fbbf24">(${(a.shares[i]*100).toFixed(0)}%)</span>`:''}`).join(' + ');
+      return `<strong>${escapeHtml(sn)}:</strong> ${procs}`;
+    } else {
+      // parallel step
+      const parts = stages.map(([sn,a])=>{
+        const procs = a.processes.map((p,i)=>`${escapeHtml(p.name)}${a.processes.length>1?` (${(a.shares[i]*100).toFixed(0)}%)`:''}`).join('+');
+        return `${escapeHtml(sn)}: ${procs}`;
+      }).join(' ‖ ');
+      return `<strong>[Parallel]</strong> ${parts}`;
+    }
+  }).join(' → ');
+}
+
+/* ═══════════════════════════════════════════════════════
+   DAG RENDERER (handles parallel steps + split branches)
+═══════════════════════════════════════════════════════ */
+function renderDAG(scenario){
+  const wrap = document.getElementById('dagSvgWrap');
+  if(!wrap) return;
+  const route = scenario.route;
+  const totalQty = (lastResults && lastResults.qty) || 0;
+
+  // Build nodes
+  // Layout: columns = steps (start, step1, step2, ..., end). Each step's parallel stages stack vertically.
+  // Within a stage, split branches stack as siblings (smaller rows).
+
+  const nodes = [{id:'start', label:'Start', t:0, type:'milestone', col:0}];
+  let col = 1;
+  // For each step, list its stages and within each stage, list its branches
+  const stepsLayout = [];  // [{col, stages:[{stageName, branches:[{nodeId,proc,branchQty}]}]}]
+  route.forEach((step, sIdx)=>{
+    const stagesArr = Object.entries(step).map(([sn,a])=>{
+      const n = a.processes.length;
+      return {
+        stageName: sn,
+        branches: a.processes.map((p,bi)=>({
+          id: `s${sIdx}_${escapeHtml(sn).replace(/[^a-zA-Z0-9]/g,'_')}_${bi}`,
+          proc: p,
+          branchQty: totalQty * (a.shares[bi] || 1/n),
+          shareLabel: a.processes.length>1 ? ` (${(a.shares[bi]*100).toFixed(0)}%)` : ''
+        }))
+      };
+    });
+    stepsLayout.push({col, stages:stagesArr});
+    stagesArr.forEach(stg=>{
+      stg.branches.forEach(br=>{
+        const bumpDays = getQtyBump(br.proc, br.branchQty);
+        const subLabel = stg.stageName + br.shareLabel + (bumpDays>0 ? ` ⚠+${bumpDays}d` : '');
+        nodes.push({
+          id: br.id,
+          label: br.proc.name,
+          sub: subLabel,
+          t: pertMean(br.proc, br.branchQty),
+          type: 'proc',
+          col,
+          stageName: stg.stageName,
+          stepIdx: sIdx
+        });
+      });
+    });
+    col++;
+  });
+  nodes.push({id:'end', label:'Delivery', t:0, type:'milestone', col});
+
+  // Edges: step i's nodes → step i+1's nodes; start → step 0; last step → end
+  const edges = [];
+  // From start to first step's nodes
+  if(stepsLayout.length){
+    stepsLayout[0].stages.forEach(stg=>{
+      stg.branches.forEach(br=> edges.push({from:'start', to:br.id}));
+    });
+  }
+  // Between consecutive steps
+  for(let i=0;i<stepsLayout.length-1;i++){
+    const from = stepsLayout[i], to = stepsLayout[i+1];
+    from.stages.forEach(fs=>{
+      fs.branches.forEach(fb=>{
+        to.stages.forEach(ts=>{
+          ts.branches.forEach(tb=> edges.push({from:fb.id, to:tb.id}));
+        });
+      });
+    });
+  }
+  // Last step to end
+  if(stepsLayout.length){
+    stepsLayout[stepsLayout.length-1].stages.forEach(stg=>{
+      stg.branches.forEach(br=> edges.push({from:br.id, to:'end'}));
+    });
+  }
+
+  // Compute earliest finish per node (forward pass)
+  const ef = {start: 0};
+  // For each step in order: each node ef = max(predecessor ef) + node.t
+  // Since the graph here is "step i nodes → all step i+1 nodes", every node in step i+1 has same predecessor max
+  let prevMax = 0;
+  stepsLayout.forEach((stepL,si)=>{
+    // For each node in this step
+    stepL.stages.forEach(stg=>{
+      stg.branches.forEach(br=>{
+        const node = nodes.find(n=>n.id===br.id);
+        ef[br.id] = prevMax + node.t;
+      });
+    });
+    // Update prevMax = max ef across all nodes in this step
+    let m = 0;
+    stepL.stages.forEach(stg=> stg.branches.forEach(br=> m = Math.max(m, ef[br.id]) ));
+    prevMax = m;
+  });
+  ef.end = prevMax;
+
+  // Latest finish (backward pass)
+  const lf = {end: ef.end};
+  let nextMin = ef.end;
+  for(let si = stepsLayout.length-1; si>=0; si--){
+    const stepL = stepsLayout[si];
+    stepL.stages.forEach(stg=>{
+      stg.branches.forEach(br=>{
+        lf[br.id] = nextMin;
+      });
+    });
+    // Update nextMin = min over (lf[node] - node.t) for all nodes in this step
+    let m = Infinity;
+    stepL.stages.forEach(stg=> stg.branches.forEach(br=>{
+      const node = nodes.find(n=>n.id===br.id);
+      m = Math.min(m, lf[br.id] - node.t);
+    }));
+    nextMin = m;
+  }
+  lf.start = nextMin;
+
+  const isCrit = id => Math.abs((ef[id]||0) - (lf[id]||0)) < 1e-6;
+  const isCritEdge = (from,to) => isCrit(from) && isCrit(to);
+
+  // Layout: position nodes in columns
+  const colW = 210, rowH = 76, padX = 70, padY = 50, centerY = 100;
+  const layout = {};
+  // Build per-column node lists
+  const cols = [[{id:'start',type:'milestone'}]];
+  stepsLayout.forEach(stepL=>{
+    const colNodes = [];
+    stepL.stages.forEach(stg=>{
+      stg.branches.forEach(br=>{
+        colNodes.push({id:br.id, type:'proc'});
+      });
+    });
+    cols.push(colNodes);
+  });
+  cols.push([{id:'end',type:'milestone'}]);
+
+  cols.forEach((colNodes, cIdx)=>{
+    const n = colNodes.length;
+    colNodes.forEach((node,nIdx)=>{
+      const yOff = n===1 ? 0 : (nIdx - (n-1)/2) * rowH;
+      layout[node.id] = { x: padX + cIdx*colW, y: padY + centerY + yOff };
+    });
+  });
+
+  const totalW = padX*2 + (cols.length-1)*colW;
+  const ys = Object.values(layout).map(p=>p.y);
+  const totalH = Math.max(280, Math.max(...ys) + padY + 50);
+
+  const NW = 158, NH = 58;
+  let svg = `<svg viewBox="0 0 ${totalW} ${totalH}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;min-height:280px">
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
+      </marker>
+      <marker id="arrowCrit" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#f87171"/>
+      </marker>
+    </defs>`;
+
+  edges.forEach(e=>{
+    const a = layout[e.from], b = layout[e.to]; if(!a||!b) return;
+    const crit = isCritEdge(e.from, e.to);
+    const stroke = crit ? '#f87171' : '#475569';
+    const sw = crit ? 2 : 1;
+    const marker = crit ? 'arrowCrit' : 'arrow';
+    const x1 = a.x + (e.from==='start'?45:NW/2), y1 = a.y;
+    const x2 = b.x - (e.to==='end'?45:NW/2), y2 = b.y;
+    const dx = (x2-x1) * 0.4;
+    svg += `<path d="M ${x1} ${y1} C ${x1+dx} ${y1}, ${x2-dx} ${y2}, ${x2} ${y2}" stroke="${stroke}" stroke-width="${sw}" fill="none" marker-end="url(#${marker})" opacity="${crit?0.95:0.6}"/>`;
+  });
+
+  nodes.forEach(n=>{
+    const p = layout[n.id]; if(!p) return;
+    const crit = isCrit(n.id);
+    const isMile = n.type==='milestone';
+    const fill = isMile ? '#0f1117' : crit ? '#451a03' : '#1e3a5f';
+    const stroke = isMile ? '#475569' : crit ? '#f87171' : '#3b82f6';
+    const txtColor = isMile ? '#94a3b8' : crit ? '#fbbf24' : '#93c5fd';
+    const w = isMile ? 90 : NW;
+    const h = isMile ? 36 : NH;
+    const x = p.x - w/2, y = p.y - h/2;
+    const r = isMile ? 18 : 8;
+    const labelText = (n.label||'').length > 22 ? n.label.slice(0,20)+'…' : n.label;
+
+    svg += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" ry="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${crit?1.5:1}"/>`;
+    svg += `<text x="${p.x}" y="${p.y - (isMile?2:8)}" text-anchor="middle" font-size="${isMile?12:11}" fill="${txtColor}" font-weight="500" font-family="-apple-system,sans-serif">${escapeHtml(labelText)}</text>`;
+    if(!isMile){
+      svg += `<text x="${p.x}" y="${p.y + 7}" text-anchor="middle" font-size="9.5" fill="#64748b" font-family="-apple-system,sans-serif">${escapeHtml(n.sub||'')}</text>`;
+      svg += `<text x="${p.x}" y="${p.y + 19}" text-anchor="middle" font-size="10" fill="${crit?'#fbbf24':'#cbd5e1'}" font-weight="500" font-family="-apple-system,sans-serif">${n.t.toFixed(1)}d</text>`;
+    }
+  });
+
+  svg += `<text x="${padX}" y="20" font-size="11" fill="#94a3b8" font-family="-apple-system,sans-serif" font-weight="500">Total project duration: ${ef.end.toFixed(1)} days (PERT means)</text>`;
+  svg += `</svg>`;
+  wrap.innerHTML = svg;
+}
+
+/* ═══════════════════════════════════════════════════════
+   HISTORY
+═══════════════════════════════════════════════════════ */
+function saveCurrentResults(){
+  if(!lastResults) return alert('Nothing to save.');
+  const h = loadHist();
+  const saved = buildSavedOrder(lastResults);
+  h.unshift(saved);
+
+  // Try to save. If it fails (quota), prune oldest entries and retry.
+  let result = saveHist(h);
+  let prunedCount = 0;
+  while(!result.ok && h.length > 1){
+    h.pop();  // drop oldest entry
+    prunedCount++;
+    result = saveHist(h);
+  }
+
+  if(!result.ok){
+    alert('Could not save: ' + result.error + '\n\nTip: use "Export JSON" in the top bar to back up your data, or delete some old saved orders to free space.');
+    return;
+  }
+
+  if(prunedCount > 0){
+    flashMsg(`Saved (had to drop ${prunedCount} oldest entr${prunedCount===1?'y':'ies'} to fit storage)`);
+  } else {
+    const usage = getStorageUsageInfo();
+    flashMsg(`Saved to history (${usage.kb} KB used)`);
+  }
+  renderHistory();
+}
+function renderHistory(){
+  const h = loadHist();
+  const el = document.getElementById('historyList');
+
+  // Update storage indicator
+  const indEl = document.getElementById('storageIndicator');
+  if(indEl){
+    const usage = getStorageUsageInfo();
+    const cap = 5120;  // ~5 MB typical browser limit
+    const pct = Math.min(100, Math.round(usage.kb / cap * 100));
+    let color = '#64748b';
+    if(pct > 60) color = '#fbbf24';
+    if(pct > 80) color = '#f87171';
+    indEl.innerHTML = `<span style="color:${color}">${usage.kb} KB used (~${pct}% of available)</span> · ${h.length} saved order${h.length===1?'':'s'}`;
+  }
+
+  if(!h.length){ el.innerHTML = '<div class="empty">No saved orders yet.</div>'; return; }
+  el.innerHTML = h.map(item=>{
+    const date = new Date(item.timestamp || item.id).toLocaleDateString('en-GB');
+    const best = item.scenarios?.[0];
+    return `
+      <div class="hist-card">
+        <div class="hist-top">
+          <input class="hist-name" value="${escapeHtml(item.orderName||'Untitled')}"
+                 onblur="renameHist(${item.id}, this.value)"
+                 onkeydown="if(event.key==='Enter')this.blur()">
+          <span class="hist-date">${date}</span>
+          <div class="hist-actions">
+            <button class="btn small" onclick="loadHistItem(${item.id})">View</button>
+            <button class="btn small" onclick="exportHistItemToExcel(${item.id})">📊 Excel</button>
+            <button class="btn small danger" onclick="delHistItem(${item.id})">Delete</button>
+          </div>
+        </div>
+        <div class="hist-summary">
+          <div class="hist-stat"><div class="hl">Quantity</div><div class="hv">${(item.qty||0).toLocaleString()} pcs</div></div>
+          <div class="hist-stat"><div class="hl">Workflow</div><div class="hv" style="font-size:11px">${escapeHtml(item.workflowName||'—')}</div></div>
+          <div class="hist-stat"><div class="hl">Time (best)</div><div class="hv">${best?.mc?.mean?.toFixed(1)||'—'}d</div></div>
+          <div class="hist-stat"><div class="hl">Cost (best)</div><div class="hv">${best?.cost?.toLocaleString()||'—'} EGP</div></div>
+          <div class="hist-stat"><div class="hl">P(on-time)</div><div class="hv">${best?.pOnTime!=null?(best.pOnTime*100).toFixed(0)+'%':'—'}</div></div>
+          <div class="hist-stat"><div class="hl">Scenarios</div><div class="hv">${item.scenarios?.length||0}</div></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+function renameHist(id, name){ const h=loadHist(); const i=h.find(x=>x.id===id); if(i){i.orderName=name||'Untitled'; saveHist(h);} }
+function delHistItem(id){ if(!confirm('Delete this saved order?')) return; saveHist(loadHist().filter(x=>x.id!==id)); renderHistory(); }
+function loadHistItem(id){
+  const item = loadHist().find(x=>x.id===id);
+  if(!item) return;
+  lastResults = item;
+  activeScenIdx = 0;
+  renderResults();
+  switchTab('results');
+}
+
+/* ═══════════════════════════════════════════════════════
+   EXCEL EXPORT (using SheetJS)
+═══════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════
+   EXCEL EXPORT — simple, action-oriented format
+   Sheets:
+     1. Order Brief — order number/brand fillable, qty, deadline, workflow
+     2. Scenarios — bullet comparison, recommended marked
+     3. Action Plan — Scenario N — step-by-step with stage deadlines (P95-based) + Actual column
+   Per-stage deadlines: walk forward from order start using cumulative per-step P95 from MC.
+═══════════════════════════════════════════════════════ */
+
+// Format a JS Date as "DD MMM YYYY" — readable in any locale
+function fmtDate(d){
+  if(!d) return '—';
+  const date = (d instanceof Date) ? d : new Date(d);
+  if(isNaN(date.getTime())) return '—';
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${String(date.getDate()).padStart(2,'0')} ${months[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+// Add days to a date and return new Date
+function addDays(date, days){
+  const d = (date instanceof Date) ? new Date(date) : new Date(date);
+  d.setDate(d.getDate() + Math.ceil(days));
+  return d;
+}
+
+// Format a route as a single-line readable string for Excel cells
+function formatRouteForExcel(route){
+  return route.map(step=>{
+    const stages = Object.entries(step);
+    if(stages.length===1){
+      const [sn,a] = stages[0];
+      const procs = a.processes.map((p,i)=>`${p.name}${a.processes.length>1?` (${(a.shares[i]*100).toFixed(0)}%)`:''}`).join(' + ');
+      return `${sn}: ${procs}`;
+    }
+    return '[Parallel] ' + stages.map(([sn,a])=>{
+      const procs = a.processes.map((p,i)=>`${p.name}${a.processes.length>1?` (${(a.shares[i]*100).toFixed(0)}%)`:''}`).join('+');
+      return `${sn}: ${procs}`;
+    }).join(' || ');
+  }).join(' -> ');
+}
+
+// Identify which scenario should get the "Recommended" marker.
+// Rule: prefer the scenario tagged "Balanced" if present; else fastest.
+function pickRecommendedIdx(scenarios){
+  for(let i=0;i<scenarios.length;i++){
+    if((scenarios[i].tags||[]).some(t=>t.tag==='bal')) return i;
+  }
+  for(let i=0;i<scenarios.length;i++){
+    if((scenarios[i].tags||[]).some(t=>t.tag==='fast')) return i;
+  }
+  return 0;
+}
+
+// Per-step P95 durations from saved stepStats (or fallback to PERT means if not available)
+function getStepP95s(scenario, route, totalQty){
+  if(scenario.mc?.stepStats && scenario.mc.stepStats.length === route.length){
+    return scenario.mc.stepStats.map(s => s.p95);
+  }
+  // Fallback: use per-step PERT means
+  return pertStepDurations(route, totalQty);
+}
+
+// Sheet 1: Order Brief
+function makeOrderBriefSheet(wb, run){
+  const startDate = run.start ? new Date(run.start) : null;
+  const endDate = run.deadline ? new Date(run.deadline) : null;
+  const aoa = [
+    ['ORDER BRIEF'],
+    [],
+    ['Order number', '(fill in here)'],
+    ['Brand name',   '(fill in here)'],
+    [],
+    ['Order name (internal)', run.orderName || ''],
+    ['Quantity (pcs)',        run.qty || 0],
+    ['Order start date',      startDate ? fmtDate(startDate) : '—'],
+    ['Final deadline',        endDate ? fmtDate(endDate) : '—'],
+    ['Days available',        run.deadlineDays!=null ? Math.round(run.deadlineDays) : '—'],
+    ['Workflow used',         run.workflowName || '—'],
+    [],
+    ['Generated', fmtDate(run.timestamp || new Date())]
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{wch:24},{wch:32}];
+  // Bold the title row by setting cell style if supported
+  XLSX.utils.book_append_sheet(wb, ws, 'Order Brief');
+}
+
+// Sheet 2: Scenarios — bullet-form comparison
+function makeScenariosSheet(wb, run){
+  const recIdx = pickRecommendedIdx(run.scenarios || []);
+  const aoa = [
+    ['SCENARIOS — pick one to follow'],
+    [],
+    ['#', 'Scenario', 'Bullet summary']
+  ];
+
+  (run.scenarios || []).forEach((s, i)=>{
+    const tagStr = (s.tags||[]).map(t=>t.label).join(' / ');
+    const isRec = (i === recIdx);
+    const label = (isRec ? '⭐ RECOMMENDED — ' : '') + tagStr;
+
+    // Build bullet summary
+    const bullets = [
+      `• Time (P95): ${Math.ceil(s.mc.p95)} days`,
+      `• Time (typical): ${Math.round(s.mc.mean)} days`,
+      `• Cost: ${Math.round(s.cost).toLocaleString()} EGP`,
+      `• Confidence to meet deadline: ${s.pOnTime!=null ? (s.pOnTime*100).toFixed(0)+'%' : '—'}`,
+      `• Route: ${formatRouteForExcel(s.route)}`
+    ];
+    aoa.push([i+1, label, bullets.join('\n')]);
+  });
+
+  // Add a notes/legend block
+  aoa.push([]);
+  aoa.push(['Legend:']);
+  aoa.push(['', '⭐ Recommended', 'Best balance of time and cost given your priorities']);
+  aoa.push(['', 'P95 days', '95% of simulations finish within this many days — the deadline you can commit to']);
+  aoa.push(['', 'Typical days', 'Average finish (50% of trials beat this)']);
+  aoa.push(['', 'Confidence %', 'Probability of meeting your final deadline based on Monte Carlo simulation']);
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{wch:4},{wch:36},{wch:80}];
+  // Wrap text in the bullet column
+  for(let r=3; r<=3+(run.scenarios?.length||0); r++){
+    const cellRef = XLSX.utils.encode_cell({r:r-1, c:2});
+    if(ws[cellRef]) ws[cellRef].s = { alignment: { wrapText: true, vertical: 'top' } };
+  }
+  // Set row heights for bullet rows
+  ws['!rows'] = [];
+  for(let r=0; r<aoa.length; r++){
+    if(r >= 3 && r < 3 + (run.scenarios?.length||0)) ws['!rows'].push({hpt: 90});
+    else ws['!rows'].push({});
+  }
+  XLSX.utils.book_append_sheet(wb, ws, 'Scenarios');
+}
+
+// Sheet 3+: Action plan per scenario
+function makeActionPlanSheet(wb, run, scenario, scenIdx, isRec){
+  const route = scenario.route;
+  const totalQty = run.qty || 0;
+  const startDate = run.start ? new Date(run.start) : null;
+  const stepP95s = getStepP95s(scenario, route, totalQty);
+
+  // Walk forward from order start, computing cumulative deadline per step
+  let cumDays = 0;
+  const stepDeadlines = stepP95s.map(d=>{
+    cumDays += d;
+    return startDate ? addDays(startDate, cumDays) : null;
+  });
+  const stepStarts = stepP95s.map((d,i)=>{
+    const sumPrev = stepP95s.slice(0,i).reduce((a,b)=>a+b,0);
+    return startDate ? addDays(startDate, sumPrev) : null;
+  });
+
+  const tagStr = (scenario.tags||[]).map(t=>t.label).join(' / ');
+  const aoa = [
+    [`ACTION PLAN — SCENARIO ${scenIdx+1}${isRec ? '  ⭐ RECOMMENDED' : ''}`],
+    ['Tags', tagStr],
+    [],
+    ['Order number', '(fill in)'],
+    ['Brand', '(fill in)'],
+    ['Quantity', totalQty],
+    ['Start date', startDate ? fmtDate(startDate) : '—'],
+    ['Final deadline (project P95)', startDate ? fmtDate(addDays(startDate, scenario.mc.p95)) : `${Math.ceil(scenario.mc.p95)} days from start`],
+    ['Total cost', Math.round(scenario.cost).toLocaleString() + ' EGP'],
+    ['Confidence to meet user deadline', scenario.pOnTime!=null ? (scenario.pOnTime*100).toFixed(0)+'%' : '—'],
+    [],
+    ['STEPS — follow in order (parallel stages within a step run together)'],
+    ['Step #','Stage(s)','Process(es) used','Qty processed','Start date','Deadline (P95)','Days allotted','Done?','Actual completion date','Notes']
+  ];
+
+  route.forEach((step, sIdx)=>{
+    const stages = Object.entries(step);
+    const isPar = stages.length > 1;
+    // Build a single row per (stage, branch process)
+    let firstRow = true;
+    stages.forEach(([stageName, asgn])=>{
+      asgn.processes.forEach((p, pi)=>{
+        const share = asgn.shares[pi] || 1/asgn.processes.length;
+        const branchQty = totalQty * share;
+        const qtyShown = asgn.processes.length>1 ? `${Math.round(branchQty).toLocaleString()} pcs (${(share*100).toFixed(0)}%)` : `${totalQty.toLocaleString()} pcs`;
+
+        aoa.push([
+          firstRow ? sIdx+1 : '',
+          firstRow ? (isPar ? '[Parallel] ' + stages.map(([s,_])=>s).join(' + ') : stageName) : (isPar ? stageName : ''),
+          p.name,
+          qtyShown,
+          firstRow ? (stepStarts[sIdx] ? fmtDate(stepStarts[sIdx]) : `Day ${stepP95s.slice(0,sIdx).reduce((a,b)=>a+b,0).toFixed(0)}`) : '',
+          firstRow ? (stepDeadlines[sIdx] ? fmtDate(stepDeadlines[sIdx]) : `Day ${stepP95s.slice(0,sIdx+1).reduce((a,b)=>a+b,0).toFixed(0)}`) : '',
+          firstRow ? Math.ceil(stepP95s[sIdx]) : '',
+          '☐',  // blank checkbox for "Done?"
+          '',   // Actual completion date — coordinator fills in
+          ''    // Notes
+        ]);
+        firstRow = false;
+      });
+    });
+    // Spacer row between steps for readability
+    if(sIdx < route.length-1) aoa.push([]);
+  });
+
+  // Footer with confidence note
+  aoa.push([]);
+  aoa.push(['Note: deadlines are P95 — i.e., 95% of simulated trials finish each step by this date.']);
+  aoa.push(['Reflects each process\'s confidence level and quantity-threshold rules.']);
+  aoa.push(['Tracking actual completion dates lets you calibrate confidence levels over time.']);
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [
+    {wch:7},   // Step #
+    {wch:24},  // Stage(s)
+    {wch:24},  // Process
+    {wch:18},  // Qty
+    {wch:14},  // Start date
+    {wch:16},  // Deadline
+    {wch:8},   // Days allotted
+    {wch:7},   // Done?
+    {wch:18},  // Actual completion date
+    {wch:24}   // Notes
+  ];
+
+  // Sheet name (max 31 chars, no special chars)
+  const safeTag = (scenario.tags?.[0]?.label || `Scenario ${scenIdx+1}`).replace(/[^a-zA-Z0-9 ]/g,'').slice(0,18);
+  const sheetName = `${scenIdx+1}. ${safeTag}`.slice(0,31);
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+}
+
+function exportRunToExcel(){
+  if(!lastResults){ alert('Run the planner first.'); return; }
+  const wb = XLSX.utils.book_new();
+  makeOrderBriefSheet(wb, lastResults);
+  makeScenariosSheet(wb, lastResults);
+  const recIdx = pickRecommendedIdx(lastResults.scenarios || []);
+  (lastResults.scenarios || []).forEach((s,i)=> makeActionPlanSheet(wb, lastResults, s, i, i===recIdx));
+  const safeName = (lastResults.orderName||'order').replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,40);
+  const filename = `${safeName}_${new Date().toISOString().slice(0,10)}.xlsx`;
+  XLSX.writeFile(wb, filename);
+  flashMsg('Excel file exported');
+}
+
+function exportHistItemToExcel(id){
+  const item = loadHist().find(x=>x.id===id);
+  if(!item){ alert('Not found.'); return; }
+  const wb = XLSX.utils.book_new();
+  makeOrderBriefSheet(wb, item);
+  makeScenariosSheet(wb, item);
+  const recIdx = pickRecommendedIdx(item.scenarios || []);
+  (item.scenarios || []).forEach((s,i)=> makeActionPlanSheet(wb, item, s, i, i===recIdx));
+  const safeName = (item.orderName||'order').replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,40);
+  const filename = `${safeName}_${new Date(item.timestamp||item.id).toISOString().slice(0,10)}.xlsx`;
+  XLSX.writeFile(wb, filename);
+}
+
+function exportAllHistoryToExcel(){
+  const h = loadHist();
+  if(!h.length){ alert('No history to export.'); return; }
+  const wb = XLSX.utils.book_new();
+  // Master list: one row per order, simple
+  const masterAOA = [
+    ['ALL ORDERS'],
+    [],
+    ['#','Order name','Date','Qty','Workflow','Recommended scenario','Time P95 (d)','Cost (EGP)','Confidence']
+  ];
+  h.forEach((item, idx)=>{
+    const recIdx = pickRecommendedIdx(item.scenarios || []);
+    const rec = item.scenarios?.[recIdx];
+    masterAOA.push([
+      idx+1,
+      item.orderName||'Untitled',
+      fmtDate(item.timestamp || item.id),
+      item.qty || 0,
+      item.workflowName || '—',
+      rec?.tags?.map(t=>t.label).join(' / ') || '—',
+      rec?.mc?.p95 ? Math.ceil(rec.mc.p95) : '—',
+      rec?.cost ? Math.round(rec.cost).toLocaleString() : '—',
+      rec?.pOnTime!=null ? (rec.pOnTime*100).toFixed(0)+'%' : '—'
+    ]);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(masterAOA);
+  ws['!cols'] = [{wch:4},{wch:32},{wch:14},{wch:9},{wch:24},{wch:22},{wch:13},{wch:14},{wch:11}];
+  XLSX.utils.book_append_sheet(wb, ws, 'All Orders');
+  flashMsg('History exported');
+  const filename = `operations-planner-history-${new Date().toISOString().slice(0,10)}.xlsx`;
+  XLSX.writeFile(wb, filename);
+}
+
+/* ═══════════════════════════════════════════════════════
+   IMPORT/EXPORT/RESET
+═══════════════════════════════════════════════════════ */
+function exportData(){
+  try {
+    const history = loadHist();
+    const counts = {
+      stages: (DATA.stages||[]).length,
+      workflows: (DATA.workflows||[]).length,
+      processes: (DATA.processes||[]).length,
+      history: history.length
+    };
+    const blob = {
+      version: 4,
+      exportedAt: new Date().toISOString(),
+      counts,
+      library: DATA,
+      history
+    };
+    const b = new Blob([JSON.stringify(blob,null,2)],{type:'application/json'});
+    const url = URL.createObjectURL(b);
+    const a = document.createElement('a');
+    a.href = url;
+    // Filename includes date and time to avoid overwriting previous backups
+    const stamp = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+    a.download = `ops-planner-backup_${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    // Mark backup taken so reminder dismisses
+    localStorage.setItem('opsplanner_lastBackup', new Date().toISOString());
+    updateBackupReminder();
+    flashMsg(`Backup saved: ${counts.processes} processes, ${counts.workflows} workflows, ${counts.history} orders`);
+  } catch(err) {
+    alert('Backup failed: ' + (err.message || err));
+  }
+}
+
+function importData(e){
+  const f = e.target.files[0]; if(!f) return;
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    try{
+      const j = JSON.parse(ev.target.result);
+      if(!j.library && !j.history){
+        alert('This file does not look like an Operations Planner backup. Aborting.');
+        return;
+      }
+
+      // Confirm before overwriting existing data
+      const existingProcs = (DATA.processes||[]).length;
+      const existingWfs = (DATA.workflows||[]).length;
+      const existingHist = loadHist().length;
+      if(existingProcs + existingWfs + existingHist > 0){
+        const incoming = j.library ? `${(j.library.processes||[]).length} processes, ${(j.library.workflows||[]).length} workflows` : '';
+        const incomingHist = j.history ? `${j.history.length} orders` : '';
+        if(!confirm(
+          `This will REPLACE your current data:\n\n` +
+          `Current: ${existingProcs} processes, ${existingWfs} workflows, ${existingHist} orders\n` +
+          `Incoming: ${incoming}, ${incomingHist}\n\n` +
+          `Continue?`
+        )){
+          // Reset the file input so picking the same file again still triggers
+          e.target.value = '';
+          return;
+        }
+      }
+
+      if(j.library) DATA = {stages:[], workflows:[], processes:[], ...j.library};
+      // Migrate v2 workflows (linear) to v3 (steps as arrays of arrays)
+      DATA.workflows = (DATA.workflows||[]).map(wf=>{
+        if(wf.stages && !wf.steps){
+          return {id:wf.id, name:wf.name, steps: wf.stages.map(s=>[s])};
+        }
+        return wf;
+      });
+      // Migrate v3 -> v4: ensure every process has a thresholds array
+      DATA.processes = (DATA.processes||[]).map(p=>({...p, thresholds: p.thresholds||[]}));
+      saveStore();
+      if(j.history) saveHist(j.history);
+      renderStagesLibrary(); renderWorkflowList(); renderProcessLibrary(); renderHistory();
+      // Reset file input so picking the same file again still triggers
+      e.target.value = '';
+      flashMsg(`Loaded: ${(DATA.processes||[]).length} processes, ${(DATA.workflows||[]).length} workflows, ${(j.history||[]).length} orders`);
+    }catch(err){
+      alert('Could not load backup: '+err.message);
+      e.target.value = '';
+    }
+  };
+  reader.readAsText(f);
+}
+
+function updateBackupReminder(){
+  // Show reminder if user has data but no recent backup (last 7 days)
+  const el = document.getElementById('backupReminder');
+  if(!el) return;
+  const dismissed = localStorage.getItem('opsplanner_reminderDismissed') === '1';
+  const lastBackup = localStorage.getItem('opsplanner_lastBackup');
+  const hasData = (DATA.processes||[]).length > 0 || (DATA.workflows||[]).length > 0;
+  let show = hasData && !dismissed;
+  if(lastBackup){
+    const daysSince = (Date.now() - new Date(lastBackup).getTime()) / 86400000;
+    if(daysSince < 7) show = false;
+  }
+  el.style.display = show ? 'block' : 'none';
+}
+
+function dismissBackupReminder(){
+  localStorage.setItem('opsplanner_reminderDismissed', '1');
+  document.getElementById('backupReminder').style.display = 'none';
+}
+
+function resetAll(){
+  if(!confirm('Erase ALL data: stages, workflows, processes, history?\n\nIf you have not saved a backup file, your data will be permanently lost.')) return;
+  // Suggest backup if user has data
+  if(((DATA.processes||[]).length + (DATA.workflows||[]).length + loadHist().length) > 0){
+    if(confirm('Save a backup first? (Recommended)')){
+      exportData();
+    }
+  }
+  if(!confirm('Final confirmation: erase everything now?')) return;
+  localStorage.removeItem(STORE_KEY); localStorage.removeItem(HIST_KEY);
+  DATA = {stages:[], workflows:[], processes:[]};
+  stageCandSelections = {}; stageEnabled = {}; splitShares = {};
+  lastResults = null;
+  renderStagesLibrary(); renderWorkflowList(); renderProcessLibrary(); renderHistory();
+  document.getElementById('resultsContent').innerHTML = '<div class="empty" style="padding:60px 0">No data.</div>';
+  flashMsg('All cleared.');
+}
+
+/* ═══════════════════════════════════════════════════════
+   UTILS & INIT
+═══════════════════════════════════════════════════════ */
+function flashMsg(msg){
+  const div = document.createElement('div');
+  div.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1d4ed8;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:200;box-shadow:0 4px 16px rgba(0,0,0,0.4)';
+  div.textContent=msg;
+  document.body.appendChild(div);
+  setTimeout(()=>{div.style.opacity='0';div.style.transition='opacity 0.3s';},1800);
+  setTimeout(()=>div.remove(),2200);
+}
+
+document.addEventListener('input', e=>{
+  if(e.target.id==='orderStart' || e.target.id==='orderDeadline'){
+    const s=document.getElementById('orderStart').value;
+    const d=document.getElementById('orderDeadline').value;
+    if(s && d){
+      const days=(new Date(d)-new Date(s))/86400000;
+      document.getElementById('deadlineHint').textContent = days>0?`Window: ${days.toFixed(0)} days`:'⚠ Deadline must be after start';
+    } else document.getElementById('deadlineHint').textContent='';
+  }
+});
+
+loadStore();
+
+// First-run example data (only if everything empty)
+if(!DATA.stages.length && !DATA.workflows.length && !DATA.processes.length){
+  DATA.stages = ['Fabric prep','Cutting','Sewing','Print','Embroidery','QC','Packaging'];
+  DATA.workflows = [
+    {id:uid(), name:'Standard hoodie', steps:[
+      ['Fabric prep'],['Cutting'],['Sewing'],['Print'],['QC'],['Packaging']
+    ]},
+    {id:uid(), name:'Print + embroidery in parallel', steps:[
+      ['Fabric prep'],['Cutting'],['Sewing'],['Print','Embroidery'],['QC'],['Packaging']
+    ]},
+    {id:uid(), name:'Plain garment (no print)', steps:[
+      ['Fabric prep'],['Cutting'],['Sewing'],['QC'],['Packaging']
+    ]}
+  ];
+  DATA.processes = [
+    {id:uid(), name:'Misr Spinning Co.', stage:'Fabric prep', timeMin:3, timeML:5, timeMax:9, cost:14000, costType:'lump', confidence:75, splittable:false, note:'Standard', thresholds:[{minQty:2000, addDays:2},{minQty:5000, addDays:5}]},
+    {id:uid(), name:'Alex Textiles', stage:'Fabric prep', timeMin:4, timeML:7, timeMax:14, cost:11500, costType:'lump', confidence:60, splittable:false, note:'Cheaper, variable', thresholds:[{minQty:1500, addDays:3}]},
+    {id:uid(), name:'Factory Cairo East — Cut', stage:'Cutting', timeMin:1, timeML:2, timeMax:4, cost:6, costType:'piece', confidence:85, splittable:true, note:'Tier 1', thresholds:[{minQty:1000, addDays:1},{minQty:3000, addDays:3}]},
+    {id:uid(), name:'Factory Maadi — Cut', stage:'Cutting', timeMin:1, timeML:2, timeMax:5, cost:5, costType:'piece', confidence:70, splittable:true, note:'', thresholds:[{minQty:800, addDays:1},{minQty:2500, addDays:3}]},
+    {id:uid(), name:'Factory Cairo East — Sew', stage:'Sewing', timeMin:7, timeML:10, timeMax:16, cost:26, costType:'piece', confidence:80, splittable:true, note:'Tier 1 quality', thresholds:[{minQty:1000, addDays:3},{minQty:3000, addDays:8},{minQty:5000, addDays:14}]},
+    {id:uid(), name:'Factory Maadi — Sew', stage:'Sewing', timeMin:5, timeML:8, timeMax:14, cost:23, costType:'piece', confidence:65, splittable:true, note:'Cheaper', thresholds:[{minQty:800, addDays:3},{minQty:2500, addDays:9}]},
+    {id:uid(), name:'Factory October — Sew', stage:'Sewing', timeMin:8, timeML:12, timeMax:20, cost:20, costType:'piece', confidence:55, splittable:false, note:'Budget tier', thresholds:[{minQty:1500, addDays:4},{minQty:4000, addDays:12}]},
+    {id:uid(), name:'DTF House Maadi', stage:'Print', timeMin:1, timeML:2, timeMax:4, cost:18, costType:'piece', confidence:85, splittable:true, note:'', thresholds:[{minQty:2000, addDays:2}]},
+    {id:uid(), name:'Screen Print Co.', stage:'Print', timeMin:2, timeML:3, timeMax:6, cost:12, costType:'piece', confidence:75, splittable:false, note:'', thresholds:[{minQty:1500, addDays:2},{minQty:4000, addDays:6}]},
+    {id:uid(), name:'Stitch House', stage:'Embroidery', timeMin:2, timeML:4, timeMax:8, cost:22, costType:'piece', confidence:80, splittable:true, note:'', thresholds:[{minQty:1000, addDays:3}]},
+    {id:uid(), name:'Embroidery Pro', stage:'Embroidery', timeMin:3, timeML:5, timeMax:10, cost:18, costType:'piece', confidence:70, splittable:true, note:'', thresholds:[{minQty:1500, addDays:4}]},
+    {id:uid(), name:'In-house QC team', stage:'QC', timeMin:0.5, timeML:1, timeMax:2, cost:2, costType:'piece', confidence:90, splittable:false, note:'', thresholds:[{minQty:2000, addDays:1}]},
+    {id:uid(), name:'External QC firm', stage:'QC', timeMin:1, timeML:2, timeMax:4, cost:3.5, costType:'piece', confidence:80, splittable:false, note:'', thresholds:[]},
+    {id:uid(), name:'Standard packing line', stage:'Packaging', timeMin:0.5, timeML:1, timeMax:2, cost:2, costType:'piece', confidence:90, splittable:true, note:'', thresholds:[{minQty:2000, addDays:1}]}
+  ];
+  saveStore();
+}
+
+renderStagesLibrary();
+renderWorkflowList();
+renderProcessLibrary();
+renderWorkflowPicker();
+updateBackupReminder();
+
+// Default dates
+const today = new Date().toISOString().slice(0,10);
+document.getElementById('orderStart').value = today;
+const future = new Date(); future.setDate(future.getDate()+30);
+document.getElementById('orderDeadline').value = future.toISOString().slice(0,10);
+document.getElementById('deadlineHint').textContent = 'Window: 30 days';
+
+// Warn before closing tab if user has unsaved data and no recent backup
+window.addEventListener('beforeunload', function(e){
+  const hasData = (DATA.processes||[]).length > 0 || (DATA.workflows||[]).length > 0 || loadHist().length > 0;
+  if(!hasData) return;
+  const lastBackup = localStorage.getItem('opsplanner_lastBackup');
+  if(lastBackup){
+    const daysSince = (Date.now() - new Date(lastBackup).getTime()) / 86400000;
+    if(daysSince < 1) return;  // Backed up today, no warning
+  }
+  // Don't fire if user has dismissed and dismissed recently
+  const dismissed = localStorage.getItem('opsplanner_warnOnClose');
+  if(dismissed === '0') return;
+  e.preventDefault();
+  e.returnValue = 'You have data that may not be backed up. Close anyway?';
+  return e.returnValue;
+});
+
+</script>
+</body>
+</html>
