@@ -8,14 +8,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
-      "require": "./dist-cjs/index.js",
+      "require": "./dist-cjs/index.cjs",
       "default": "./dist/index.js"
     }
   },
   "scripts": {
     "build": "npm run build:esm && npm run build:cjs",
     "build:esm": "tsc",
-    "build:cjs": "tsc -p tsconfig.cjs.json",
+    "build:cjs": "tsc -p tsconfig.cjs.json && node -e \"require('fs').copyFileSync('dist-cjs/index.js','dist-cjs/index.cjs')\"",
     "dev": "tsc --watch"
   },
   "devDependencies": {
