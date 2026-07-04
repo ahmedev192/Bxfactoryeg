@@ -167,6 +167,33 @@ Certbot updates the nginx config for HTTPS and sets up auto-renewal.
 
 ## 6. Deploy updates
 
+Automated deployment is available from the repository root:
+
+```bash
+bash scripts/deploy.sh
+```
+
+The script builds locally, uploads an artifact over SSH, preserves production `.env` and uploads, installs server dependencies, runs Prisma generate/migrations/seed, restarts PM2, reloads nginx, and runs public plus authenticated smoke tests.
+
+Defaults target the current VPS:
+
+```bash
+DEPLOY_HOST=root@162.0.239.86
+SSH_KEY=~/.ssh/brandxcelerator_deploy_ed25519
+DOMAIN=brandxcelerator.com
+WWW_DOMAIN=www.brandxcelerator.com
+```
+
+Common overrides:
+
+```bash
+LOCAL_TESTS=1 bash scripts/deploy.sh
+LOCAL_INSTALL=0 REMOTE_INSTALL=0 bash scripts/deploy.sh
+SSH_KEY=/path/to/key DEPLOY_HOST=root@example.com bash scripts/deploy.sh
+```
+
+Manual deployment steps:
+
 ```bash
 cd /var/www/production-ops
 git pull
