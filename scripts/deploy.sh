@@ -19,6 +19,7 @@ REMOTE_INSTALL="${REMOTE_INSTALL:-1}"
 RUN_SEED="${RUN_SEED:-1}"
 AUTH_SMOKE="${AUTH_SMOKE:-1}"
 KEEP_ARTIFACT="${KEEP_ARTIFACT:-0}"
+SSH_RETRIES="${SSH_RETRIES:-3}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -41,20 +42,51 @@ require_cmd() {
 }
 
 ssh_cmd() {
+  local attempt=1
+  local status=0
+  while true; do
+    ssh -i "$SSH_KEY" \
+      -o BatchMode=yes \
+      -o IdentitiesOnly=yes \
+      -o StrictHostKeyChecking=accept-new \
+      -o ConnectTimeout=20 \
+      "$DEPLOY_HOST" "$@" && return 0
+    status=$?
+    if (( attempt >= SSH_RETRIES )); then
+      return "$status"
+    fi
+    log "SSH attempt $attempt failed; retrying"
+    sleep "$((attempt * 5))"
+    attempt=$((attempt + 1))
+  done
+}
+
+scp_file() {
+  local attempt=1
+  local status=0
+  while true; do
+    scp -i "$SSH_KEY" \
+      -o BatchMode=yes \
+      -o IdentitiesOnly=yes \
+      -o StrictHostKeyChecking=accept-new \
+      "$1" "$DEPLOY_HOST:$2" && return 0
+    status=$?
+    if (( attempt >= SSH_RETRIES )); then
+      return "$status"
+    fi
+    log "SCP attempt $attempt failed; retrying"
+    sleep "$((attempt * 5))"
+    attempt=$((attempt + 1))
+  done
+}
+
+ssh_stream() {
   ssh -i "$SSH_KEY" \
     -o BatchMode=yes \
     -o IdentitiesOnly=yes \
     -o StrictHostKeyChecking=accept-new \
     -o ConnectTimeout=20 \
     "$DEPLOY_HOST" "$@"
-}
-
-scp_file() {
-  scp -i "$SSH_KEY" \
-    -o BatchMode=yes \
-    -o IdentitiesOnly=yes \
-    -o StrictHostKeyChecking=accept-new \
-    "$1" "$DEPLOY_HOST:$2"
 }
 
 curl_expect_2xx() {
@@ -127,7 +159,7 @@ log "Uploading artifact to $DEPLOY_HOST"
 scp_file "$ARTIFACT" "$REMOTE_ARTIFACT"
 
 log "Deploying on remote server"
-ssh_cmd "APP_DIR='$APP_DIR' APP_USER='$APP_USER' PM2_APP='$PM2_APP' REMOTE_ARTIFACT='$REMOTE_ARTIFACT' REMOTE_INSTALL='$REMOTE_INSTALL' RUN_SEED='$RUN_SEED' bash -s" <<'REMOTE'
+ssh_stream "APP_DIR='$APP_DIR' APP_USER='$APP_USER' PM2_APP='$PM2_APP' REMOTE_ARTIFACT='$REMOTE_ARTIFACT' REMOTE_INSTALL='$REMOTE_INSTALL' RUN_SEED='$RUN_SEED' bash -s" <<'REMOTE'
 set -Eeuo pipefail
 
 log() {
@@ -190,8 +222,19 @@ log "Validating and reloading nginx"
 nginx -t
 systemctl reload nginx
 
-log "Checking local API health"
-curl -fsS "http://127.0.0.1:4000/api/v1/health" >/dev/null
+log "Waiting for local API health"
+healthy=0
+for attempt in {1..30}; do
+  if curl -fsS "http://127.0.0.1:4000/api/v1/health" >/dev/null; then
+    healthy=1
+    break
+  fi
+  sleep 2
+done
+if [[ "$healthy" != "1" ]]; then
+  run_as_app "pm2 status"
+  exit 1
+fi
 
 rm -f "$REMOTE_ARTIFACT"
 log "Remote deploy complete"
@@ -199,7 +242,7 @@ REMOTE
 
 if [[ "$AUTH_SMOKE" == "1" ]]; then
   log "Running authenticated smoke test on remote API"
-  ssh_cmd "APP_DIR='$APP_DIR' bash -s" <<'REMOTE_AUTH'
+  ssh_stream "APP_DIR='$APP_DIR' bash -s" <<'REMOTE_AUTH'
 set -Eeuo pipefail
 python3 - <<'PY'
 import json
